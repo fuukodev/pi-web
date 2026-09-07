@@ -18,6 +18,7 @@ import { AgentSessionPanel } from "./AgentSessionPanel";
 import { TerminalPanel } from "./TerminalPanel";
 import { newTerminalTab, restoreTerminalTabs, TERMINAL_TABS_KEY, type TerminalTab } from "./terminal-tab-state";
 import { useTheme } from "@/hooks/useTheme";
+import { THEME_OPTIONS } from "@/lib/theme";
 import { useI18n } from "@/hooks/useI18n";
 import { useIsMobile, useIsNarrowMobile } from "@/hooks/useIsMobile";
 import { useViewportHeight } from "@/hooks/useViewportHeight";
@@ -60,6 +61,8 @@ import type { FileViewerState } from "@/lib/file-viewer-state";
 import type { ToolEntry } from "@/lib/tool-presets";
 import { getSessionFamily } from "@/lib/session-family";
 import { getLastSettingsSection, type SettingsSection } from "@/lib/settings-navigation";
+import { useRegisterAction } from "@/hooks/useKeybindings";
+import { CommandPalette, type PaletteCommand, type PaletteMode } from "./CommandPalette";
 
 type SessionCopyField = "file" | "id" | "projectDir" | "gitBranch" | "gitWorktree";
 type AutoNameStatus =
@@ -80,7 +83,7 @@ export function AppShell() {
   const searchParams = useSearchParams();
   const [initialNavigation] = useState(() => getInitialNavigation(searchParams));
   // Keep the system-theme subscription mounted for the lifetime of the app.
-  useTheme();
+  const { preference, setThemePreference } = useTheme();
   const { locale, t: translate } = useI18n();
   const isMobile = useIsMobile();
   const isNarrowMobile = useIsNarrowMobile();
@@ -162,6 +165,13 @@ export function AppShell() {
   }, []);
   const [explorerRefreshKey, setExplorerRefreshKey] = useState(0);
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
+  const [palette, setPalette] = useState<{ open: boolean; mode: PaletteMode | null }>({ open: false, mode: null });
+  const openPalette = useCallback((mode: PaletteMode | null) => {
+    setPalette({ open: true, mode });
+  }, []);
+  const closePalette = useCallback(() => {
+    setPalette((current) => current.open ? { open: false, mode: null } : current);
+  }, []);
   const [modelsRefreshKey, setModelsRefreshKey] = useState(0);
   const [projectTrust, setProjectTrust] = useState<ProjectTrustStatus | null>(null);
   const [projectTrustDialogOpen, setProjectTrustDialogOpen] = useState(false);
@@ -438,13 +448,13 @@ export function AppShell() {
   const [activeFileTabId, setActiveFileTabId] = useState<string | null>(null);
   const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([]);
   const [terminalsRestored, setTerminalsRestored] = useState(false);
-  const panelTabs: Tab[] = [...fileTabs, ...terminalTabs.map((tab) => ({
+  const panelTabs: Tab[] = useMemo(() => [...fileTabs, ...terminalTabs.map((tab) => ({
     id: tab.id,
     label: getFileName(tab.cwd) || tab.cwd,
     filePath: tab.cwd,
     kind: "terminal" as const,
     closing: Boolean(tab.closing),
-  }))];
+  }))], [fileTabs, terminalTabs]);
 
   useEffect(() => {
     try {
@@ -754,11 +764,9 @@ export function AppShell() {
     router.replace(typeof window !== "undefined" ? window.location.pathname : "/", { scroll: false });
   }, [invalidateWorkspaceRestore, router, isMobile]);
 
-  // Global keyboard shortcuts (handles Esc, Ctrl+Alt+N etc.)
-  useGlobalKeyboardShortcuts({
-    onNewSession: (cwd: string) => handleNewSession(`kb-${Date.now()}`, cwd),
-    activeCwd,
-  });
+  // Global keyboard shortcuts (Esc stop-agent chain; the rest of the keymap
+  // lives in the KeybindingsProvider registry below).
+  useGlobalKeyboardShortcuts();
 
   // Client-built transient SessionInfo (new session / fork) lacks the
   // server-computed projectKey, which the same-project check in
@@ -1096,6 +1104,68 @@ export function AppShell() {
   }, [projectTrustBusy, projectTrustCwd]);
 
   const activeFileTab = fileTabs.find((tab) => tab.id === activeFileTabId) ?? null;
+
+  // ---- Keybinding action handlers + palette command list ----
+  const handleNewSessionAction = useCallback(() => {
+    const cwd = activeCwd ?? selectedSession?.cwd ?? null;
+    if (cwd) handleNewSession(`kb-${Date.now()}`, cwd);
+  }, [activeCwd, selectedSession?.cwd, handleNewSession]);
+  const handlePaletteFiles = useCallback(() => openPalette("files"), [openPalette]);
+  const handlePaletteCommands = useCallback(() => openPalette("commands"), [openPalette]);
+  const handlePaletteSessions = useCallback(() => openPalette("sessions"), [openPalette]);
+  const handlePaletteWorkspaces = useCallback(() => openPalette("workspaces"), [openPalette]);
+  const handlePanelToggle = useCallback(() => {
+    setRightPanelOpen((open) => open ? false : fileTabs.length > 0 || terminalTabs.length > 0);
+  }, [fileTabs.length, terminalTabs.length]);
+  const cycleTab = useCallback((direction: 1 | -1) => {
+    if (panelTabs.length === 0) return;
+    const currentIndex = panelTabs.findIndex((tab) => tab.id === activeFileTabId);
+    const nextIndex = currentIndex === -1
+      ? (direction === 1 ? 0 : panelTabs.length - 1)
+      : (currentIndex + direction + panelTabs.length) % panelTabs.length;
+    setActiveFileTabId(panelTabs[nextIndex].id);
+    setRightPanelOpen(true);
+  }, [panelTabs, activeFileTabId]);
+  const handleTabNext = useCallback(() => cycleTab(1), [cycleTab]);
+  const handleTabPrev = useCallback(() => cycleTab(-1), [cycleTab]);
+  const handleTabClose = useCallback(() => {
+    if (activeFileTabId) handleCloseFileTab(activeFileTabId);
+  }, [activeFileTabId, handleCloseFileTab]);
+  const handleSettingsOpen = useCallback(() => {
+    setSettingsSection(getLastSettingsSection(projectTrustCwd));
+  }, [projectTrustCwd]);
+  const handleThemeToggle = useCallback(() => {
+    const index = THEME_OPTIONS.findIndex((option) => option.id === preference);
+    const next = THEME_OPTIONS[(index + 1) % THEME_OPTIONS.length] ?? THEME_OPTIONS[0];
+    setThemePreference(next.id, { x: window.innerWidth / 2, y: 0 });
+  }, [preference, setThemePreference]);
+
+  useRegisterAction("web.palette.files", handlePaletteFiles);
+  useRegisterAction("web.palette.commands", handlePaletteCommands);
+  useRegisterAction("web.palette.sessions", handlePaletteSessions);
+  useRegisterAction("web.palette.workspaces", handlePaletteWorkspaces);
+  useRegisterAction("web.session.new", handleNewSessionAction);
+  useRegisterAction("web.sidebar.toggle", handleSidebarToggle);
+  useRegisterAction("web.panel.toggle", handlePanelToggle);
+  useRegisterAction("web.tab.next", handleTabNext);
+  useRegisterAction("web.tab.prev", handleTabPrev);
+  useRegisterAction("web.tab.close", handleTabClose);
+  useRegisterAction("web.settings.open", handleSettingsOpen);
+  useRegisterAction("web.theme.toggle", handleThemeToggle);
+
+  const paletteCommands = useMemo<PaletteCommand[]>(() => [
+    { id: "commands.newSession", label: translate("commands.newSession"), actionId: "web.session.new", run: handleNewSessionAction },
+    { id: "commands.toggleSidebar", label: translate("commands.toggleSidebar"), actionId: "web.sidebar.toggle", run: handleSidebarToggle },
+    { id: "commands.togglePanel", label: translate("commands.togglePanel"), actionId: "web.panel.toggle", run: handlePanelToggle },
+    { id: "commands.nextTab", label: translate("commands.nextTab"), actionId: "web.tab.next", run: handleTabNext },
+    { id: "commands.prevTab", label: translate("commands.prevTab"), actionId: "web.tab.prev", run: handleTabPrev },
+    { id: "commands.closeTab", label: translate("commands.closeTab"), actionId: "web.tab.close", run: handleTabClose },
+    { id: "commands.searchFiles", label: translate("commands.searchFiles"), actionId: "web.palette.files", run: handlePaletteFiles },
+    { id: "commands.searchSessions", label: translate("commands.searchSessions"), actionId: "web.palette.sessions", run: handlePaletteSessions },
+    { id: "commands.switchWorkspace", label: translate("commands.switchWorkspace"), actionId: "web.palette.workspaces", run: handlePaletteWorkspaces },
+    { id: "commands.openSettings", label: translate("commands.openSettings"), actionId: "web.settings.open", run: handleSettingsOpen },
+    { id: "commands.toggleTheme", label: translate("commands.toggleTheme"), actionId: "web.theme.toggle", run: handleThemeToggle },
+  ], [translate, handleNewSessionAction, handleSidebarToggle, handlePanelToggle, handleTabNext, handleTabPrev, handleTabClose, handlePaletteFiles, handlePaletteSessions, handlePaletteWorkspaces, handleSettingsOpen, handleThemeToggle]);
   const activeCwdName = activeCwd ? getFileName(activeCwd) || activeCwd : null;
   const windowTitle = activeCwdName ? `${activeCwdName} - Pi Web` : "Pi Web";
 
@@ -2432,6 +2502,18 @@ export function AppShell() {
         </div>
       </div>
     </div>
+    <CommandPalette
+      open={palette.open}
+      initialMode={palette.mode}
+      onClose={closePalette}
+      activeCwd={activeCwd ?? selectedSession?.cwd ?? null}
+      sessions={sessionsWithSelection}
+      selectedSessionId={selectedSession?.id ?? null}
+      commands={paletteCommands}
+      onOpenFile={(filePath, fileName) => handleOpenFile(filePath, fileName, { sourceSessionId: selectedSession?.id ?? null })}
+      onSelectSession={handleSelectSession}
+      onSelectWorkspace={handleSelectSession}
+    />
     {settingsSection && (
       <SettingsPanel
         cwd={projectTrustCwd}
