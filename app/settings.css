@@ -1216,3 +1216,117 @@
     }
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Keyboard shortcuts settings section
+ * ------------------------------------------------------------------------- */
+.settings-shortcuts {
+  max-width: 44rem;
+}
+
+.settings-shortcuts-recording {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.settings-shortcuts-recording-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.settings-shortcuts-conflict {
+  margin: 8px 0;
+  font-size: 12px;
+  color: #fbbf24;
+}
+
+.settings-shortcuts-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-shortcuts-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-shortcuts-row:last-child {
+  border-bottom: none;
+}
+
+.settings-shortcuts-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.settings-shortcuts-binding {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.settings-shortcuts-kbd {
+  padding: 2px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+.settings-shortcuts-unassigned {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.settings-shortcuts-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.settings-shortcuts-button {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.settings-shortcuts-button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.settings-shortcuts-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+}
+
+@media (max-width: 640px) {
+  .settings-shortcuts-row {
+    flex-wrap: wrap;
+  }
+
+  .settings-shortcuts-label {
+    flex-basis: 100%;
+  }
+}
