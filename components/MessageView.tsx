@@ -8,6 +8,7 @@ import { ThinkingIcon } from "./ThinkingIcon";
 import { copyText } from "@/lib/clipboard";
 import { useI18n } from "@/hooks/useI18n";
 import { parseCompactionSummary } from "@/lib/compaction-summary";
+import { formatTokenCount } from "@/lib/token-format";
 import { getAssistantErrorMessage, getThinkingPreview, isEmptyThinkingBlock } from "@/lib/message-display";
 import { parseUnifiedPatch, type SplitDiffCell } from "@/lib/patch";
 import { isEditToolName } from "@/lib/tool-names";
@@ -1417,11 +1418,21 @@ function PairedResult({ text, images, isEmpty, isError }: {
   );
 }
 
+function getCompactionTokensBefore(details: unknown): number | null {
+  if (!details || typeof details !== "object") return null;
+  const tokens = (details as { tokensBefore?: unknown }).tokensBefore;
+  return typeof tokens === "number" && Number.isFinite(tokens) ? tokens : null;
+}
+
 function CompactionMessageView({ message }: { message: CustomMessage }) {
   const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
   const summary = getMessageText(message.content);
   const parsedSummary = useMemo(() => parseCompactionSummary(summary), [summary]);
   const time = formatTime(message.timestamp);
+  const tokensBefore = getCompactionTokensBefore(message.details);
+
+  const toggle = () => setExpanded((value) => !value);
 
   return (
     <div style={{ marginBottom: 16 }}>
@@ -1434,36 +1445,81 @@ function CompactionMessageView({ message }: { message: CustomMessage }) {
         }}
       >
         <div
+          role="button"
+          tabIndex={0}
+          aria-expanded={expanded}
+          aria-label={expanded ? t("i18n.collapse") : t("i18n.expand")}
+          title={expanded ? t("i18n.collapse") : t("i18n.expand")}
+          onClick={toggle}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggle();
+            }
+          }}
           style={{
             display: "flex",
             alignItems: "center",
             gap: 8,
             padding: "7px 10px",
-            borderBottom: "1px solid var(--border)",
+            borderBottom: expanded ? "1px solid var(--border)" : "none",
             background: "var(--bg-panel)",
             color: "var(--text-muted)",
+            cursor: "pointer",
+            userSelect: "none",
           }}
         >
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="none"
+            stroke="var(--text-dim)"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden={true}
+            style={{ flexShrink: 0, transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}
+          >
+            <polyline points="3.5 2 6.5 5 3.5 8" />
+          </svg>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 650 }}>
             compaction
           </span>
+          {tokensBefore !== null && (
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                color: "var(--text-dim)",
+                background: "var(--bg)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                padding: "1px 5px",
+              }}
+            >
+              {formatTokenCount(tokensBefore)} tokens
+            </span>
+          )}
           {time && <span style={{ marginLeft: "auto", color: "var(--text-dim)", fontSize: 10 }}>{time}</span>}
         </div>
 
-        <div style={{ padding: "11px 13px 12px" }}>
-          <div style={{ color: "var(--text)", fontSize: "calc(15px + var(--chat-font-size-offset, 0px))", fontWeight: 700, lineHeight: 1.35 }}>
-             {t("i18n.conversationCompacted")}
+        {expanded && (
+          <div style={{ padding: "11px 13px 12px" }}>
+            <div style={{ color: "var(--text)", fontSize: "calc(15px + var(--chat-font-size-offset, 0px))", fontWeight: 700, lineHeight: 1.35 }}>
+              {t("i18n.conversationCompacted")}
+            </div>
+            <div style={{ marginTop: 3, marginBottom: 10, color: "var(--text)", fontSize: "calc(14px + var(--chat-font-size-offset, 0px))", lineHeight: 1.5 }}>
+              {t("i18n.compactionDescription")}
+            </div>
+            {parsedSummary.body ? (
+              <MarkdownBody className="markdown-compaction-message">{parsedSummary.body}</MarkdownBody>
+            ) : (
+              <span style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("i18n.noSummary")}</span>
+            )}
+            <CompactionFileMetadata readFiles={parsedSummary.readFiles} modifiedFiles={parsedSummary.modifiedFiles} />
           </div>
-          <div style={{ marginTop: 3, marginBottom: 10, color: "var(--text)", fontSize: "calc(14px + var(--chat-font-size-offset, 0px))", lineHeight: 1.5 }}>
-             {t("i18n.compactionDescription")}
-          </div>
-          {parsedSummary.body ? (
-            <MarkdownBody className="markdown-compaction-message">{parsedSummary.body}</MarkdownBody>
-          ) : (
-             <span style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("i18n.noSummary")}</span>
-          )}
-          <CompactionFileMetadata readFiles={parsedSummary.readFiles} modifiedFiles={parsedSummary.modifiedFiles} />
-        </div>
+        )}
       </div>
     </div>
   );
