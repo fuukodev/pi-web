@@ -294,3 +294,35 @@ test("renders custom-message images as buttons that open a larger preview", () =
   assert.match(html, /<button[^>]+aria-label="Preview image"[^>]*>/);
   assert.match(html, /<img[^>]+src="data:image\/png;base64,YWJj"/);
 });
+
+const COMPACTION_MESSAGE = {
+  role: "custom",
+  customType: "compaction",
+  content: "## Summary\n\nThe user asked for a collapsible compaction block.",
+  display: true,
+  details: { tokensBefore: 123456, firstKeptEntryId: "keep-1" },
+  timestamp: Date.now(),
+};
+
+test("renders the compaction block collapsed by default", () => {
+  const html = renderMessage(COMPACTION_MESSAGE);
+
+  assert.match(html, /compaction/);
+  assert.match(html, /aria-expanded="false"/);
+  assert.match(html, /aria-label="Expand"/);
+  assert.doesNotMatch(html, /Conversation compacted/);
+  assert.doesNotMatch(html, /collapsible compaction block/);
+});
+
+test("shows the compacted token count as a header badge", () => {
+  const html = renderMessage(COMPACTION_MESSAGE);
+
+  assert.match(html, />123k tokens</);
+});
+
+test("omits the token badge when compaction details are missing", () => {
+  const html = renderMessage({ ...COMPACTION_MESSAGE, details: undefined });
+
+  assert.doesNotMatch(html, /tokens</);
+  assert.match(html, /aria-expanded="false"/);
+});
