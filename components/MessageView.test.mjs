@@ -88,7 +88,7 @@ test("marks only the matched text block after splitting thinking and the final a
       const html = renderMessage({ ...message, content }, { searchBlock });
       assert.equal((html.match(/data-search-target="true"/g) ?? []).length, content.includes(searchBlock) ? 1 : 0);
       if (content.includes(searchBlock)) {
-        assert.match(html, new RegExp(`data-search-target="true">(?:(?!data-message-text)[\\s\\S])*${searchBlock.text}`));
+        assert.match(html, new RegExp(`data-search-target="true"[^>]*>(?:(?!data-message-text)[\\s\\S])*${searchBlock.text}`));
       }
     }
   }
@@ -217,6 +217,22 @@ test("marks persisted assistant messages with their source entry", () => {
 
   assert.match(html, /data-message-role="assistant"/);
   assert.match(html, /data-entry-id="assistant-entry"/);
+  assert.match(html, /data-consultation-kind="assistant_text"/);
+  assert.match(html, /data-consultation-entry-id="assistant-entry"/);
+  assert.match(html, /data-consultation-block-index="0"/);
+});
+
+test("marks tool-call source coordinates for consultation selection", () => {
+  const html = renderMessage({
+    role: "assistant",
+    provider: "openai",
+    model: "gpt-test",
+    content: [{ type: "toolCall", toolCallId: "call-1", toolName: "read", input: { path: "a.ts" } }],
+  }, { entryId: "assistant-entry" });
+
+  assert.match(html, /data-consultation-kind="tool_call"/);
+  assert.match(html, /data-consultation-entry-id="assistant-entry"/);
+  assert.match(html, /data-consultation-block-index="0"/);
 });
 
 test("renders a complete SDK skill expansion as a compact command", () => {

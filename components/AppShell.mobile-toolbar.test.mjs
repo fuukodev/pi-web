@@ -19,7 +19,7 @@ test("uses a compact narrow-mobile toolbar with a floating action layer", () => 
     /data-mobile-toolbar-actions="true"[\s\S]*?position: "absolute"[\s\S]*?right: 0,[\s\S]*?left: TOP_BAR_ICON_BUTTON_SIZE/,
   );
 
-  for (const action of ["history", "name", "agents", "branches", "system", "tools", "theme", "language"]) {
+  for (const action of ["history", "name", "agents", "consultations", "branches", "system", "tools", "theme", "language"]) {
     assert.match(source, new RegExp(`data-mobile-toolbar-action=(?:\\{mobile \\? )?"${action}"`));
   }
 });
@@ -34,7 +34,7 @@ test("keeps the Agents panel open while switching sessions and positions it at t
   assert.match(source, /const AGENT_PANEL_WIDTH = 420/);
   assert.match(
     source,
-    /if \(activeTopPanel === "agents"\)[\s\S]*?left: topBarRect\.left[\s\S]*?width: Math\.min\(AGENT_PANEL_WIDTH, topBarRect\.width\)/,
+    /if \(activeTopPanel === "agents" \|\| activeTopPanel === "consultations"\)[\s\S]*?left: topBarRect\.left[\s\S]*?width: Math\.min\(width, topBarRect\.width\)/,
   );
   assert.match(source, /<AgentSessionPanel[\s\S]*?onSelectSession=\{handleSelectSession\}/);
 });

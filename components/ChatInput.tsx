@@ -47,6 +47,7 @@ interface Props {
   isStreaming: boolean;
   /** Text-only composer without the session controls or outer spacing. */
   compact?: boolean;
+  placeholder?: string;
   model?: { provider: string; modelId: string } | null;
   isAutoModelSelection?: boolean;
   modelNames?: Record<string, string>;
@@ -477,10 +478,18 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   draftKey,
   cwd,
   compact = false,
+  placeholder,
 }: Props, ref) {
   const { t } = useI18n();
   const { fontSize } = useChatAppearance();
   const isMobile = useIsMobile();
+  let resolvedPlaceholder = t("chat.messagePlaceholder");
+  if (isStreaming) {
+    resolvedPlaceholder = onSteer || onFollowUp
+      ? t("chat.steerPlaceholder")
+      : t("chat.agentPlaceholder");
+  }
+  if (placeholder !== undefined) resolvedPlaceholder = placeholder;
   const [value, setValue] = useState(() => (draftKey ? getDraft(draftKey)?.value ?? "" : ""));
   const [toolDropdownOpen, setToolDropdownOpen] = useState(false);
   const [thinkingDropdownOpen, setThinkingDropdownOpen] = useState(false);
@@ -2021,12 +2030,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             }}
             onInput={handleInput}
             onPaste={handlePaste}
-            placeholder={
-              isStreaming && (onSteer || onFollowUp)
-                ? t("chat.steerPlaceholder")
-                : isStreaming ? t("chat.agentPlaceholder")
-                : t("chat.messagePlaceholder")
-            }
+            placeholder={resolvedPlaceholder}
             rows={1}
             style={{
               flex: compact ? "none" : 1,

@@ -38,7 +38,12 @@ import {
   readSubagentSessionResources,
   SUBAGENT_CONTROL_TOOL_NAMES,
 } from "./subagents";
+import {
+  CONSULTATION_SYSTEM_PROMPT,
+  readConsultationMetadata,
+} from "./session-consultation";
 import { createSubagentController } from "./subagent-runtime";
+import { buildSessionRelation } from "./session-relation";
 import { isBuiltInSubagentsEnabled } from "./subagent-settings";
 import { resolveShellTools } from "./powershell-settings";
 import { CHAT_ONLY_RESOURCE_LOADER_OPTIONS, contextFilesSystemPrompt } from "./chat-only";
@@ -163,6 +168,8 @@ export interface RpcSessionStartOptions {
   initialModel?: { provider: string; modelId: string };
   allowInitialModelFallback?: boolean;
   thinkingLevel?: ThinkingLevel;
+  /** Starts a persisted consultation child with no project resources. */
+  consultation?: boolean;
 }
 
 const CODING_TOOL_NAMES = ["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"];
@@ -1839,7 +1846,15 @@ export function getRpcSessionInfos(): SessionInfo[] {
     const firstUserMessage = messages.find((entry) => entry.message.role === "user");
     const sessionFile = manager.getSessionFile() ?? session.sessionFile;
     const persisted = Boolean(sessionFile && existsSync(sessionFile));
-    const subagent = readSubagentRun(entries as unknown as SessionEntry[], header?.id ?? session.sessionId, sessionFile ?? "");
+    const typedEntries = entries as unknown as SessionEntry[];
+    const subagent = readSubagentRun(typedEntries, header?.id ?? session.sessionId, sessionFile ?? "");
+    const consultation = readConsultationMetadata(typedEntries);
+    const relation = buildSessionRelation({
+      consultation,
+      subagent,
+      subagentStatus: session.isRunning() ? "running" : undefined,
+      parentSessionPath: header?.parentSession,
+    });
 
     // An ensure_session call creates an idle, empty runtime while the composer
     // loads commands. Do not leak it into history before a prompt is accepted.
@@ -1864,16 +1879,10 @@ export function getRpcSessionInfos(): SessionInfo[] {
       modified: new Date(lastActivityMs).toISOString(),
       messageCount: messages.length,
       firstMessage: firstUserMessage ? runtimeMessageText(firstUserMessage) || "(no messages)" : "(no messages)",
-      ...(subagent ? {
-        parentSessionId: subagent.parentSessionId,
-        relation: {
-          kind: "subagent" as const,
-          parentSessionId: subagent.parentSessionId,
-          profile: subagent.profile,
-          description: subagent.description,
-          status: session.isRunning() ? "running" as const : subagent.status,
-        },
-      } : {}),
+      ...(relation && "parentSessionId" in relation
+        ? { parentSessionId: relation.parentSessionId }
+        : {}),
+      ...(relation ? { relation } : {}),
       transient: !persisted,
     });
   }
@@ -1949,6 +1958,12 @@ export async function startRpcSession(
     sessionManager = SessionManager.create(cwd, undefined);
   }
   const sessionCwd = sessionManager.getCwd();
+  // Persisted consultation children must keep their isolated resource policy
+  // when reopened through the normal agent routes after a page refresh.
+  const consultation = options.consultation === true || (
+    Boolean(sessionFile)
+    && readConsultationMetadata(sessionManager.getEntries() as unknown as SessionEntry[]) !== null
+  );
   const subagentResources = sessionFile
     ? readSubagentSessionResources(
         sessionManager.getEntries() as unknown as SessionEntry[],
@@ -1957,14 +1972,16 @@ export async function startRpcSession(
   const persistedToolNames = subagentResources
     ? undefined
     : readSessionToolSelection(sessionManager.getEntries() as unknown as SessionEntry[]);
-  const selectedToolNames = subagentResources?.tools ?? persistedToolNames ?? requestedToolNames;
-  if (!subagentResources && persistedToolNames === undefined && requestedToolNames !== undefined) {
+  const selectedToolNames = consultation
+    ? []
+    : subagentResources?.tools ?? persistedToolNames ?? requestedToolNames;
+  if (!consultation && !subagentResources && persistedToolNames === undefined && requestedToolNames !== undefined) {
     appendSessionToolSelection(sessionManager, requestedToolNames);
   }
   const subagentLoadsResources = Boolean(
     subagentResources?.loadExtensions || subagentResources?.loadSkills,
   );
-  const chatOnly = selectedToolNames?.length === 0 && !subagentLoadsResources;
+  const chatOnly = consultation || (selectedToolNames?.length === 0 && !subagentLoadsResources);
   const finishStartingSession = trackStartingSession(sessionCwd);
   const starting = (async () => {
     // Some extensions access the SDK's global theme even outside the terminal UI.
@@ -1989,49 +2006,66 @@ export async function startRpcSession(
     // before the SDK restores the saved model from the session file.
     // Gate untrusted project extensions so opening a repository does not run
     // its .pi/extensions code automatically (see lib/project-trust.ts, #236).
-    const trustReloadOptions = subagentResources
-      ? subagentLoadsResources
-        ? projectTrustReloadOptions(sessionCwd, agentDir)
-        : undefined
-      : chatOnly
-        ? undefined
-        : projectTrustReloadOptions(sessionCwd, agentDir);
     const settingsManager = SettingsManager.create(sessionCwd, agentDir);
+    let trustReloadOptions: ReturnType<typeof projectTrustReloadOptions> | undefined;
+    if (subagentResources) {
+      if (subagentLoadsResources) trustReloadOptions = projectTrustReloadOptions(sessionCwd, agentDir);
+    } else if (!chatOnly) {
+      trustReloadOptions = projectTrustReloadOptions(sessionCwd, agentDir);
+    }
+
+    let resourceLoaderOptions: Parameters<typeof createAgentSessionServices>[0]["resourceLoaderOptions"];
+    if (consultation) {
+      resourceLoaderOptions = {
+        noExtensions: true,
+        noSkills: true,
+        noPromptTemplates: true,
+        noThemes: true,
+        noContextFiles: true,
+        systemPrompt: " ",
+        systemPromptOverride: () => undefined,
+        appendSystemPrompt: [],
+      };
+    } else if (subagentResources) {
+      resourceLoaderOptions = {
+        noExtensions: !subagentResources.loadExtensions,
+        noSkills: !subagentResources.loadSkills,
+        noPromptTemplates: true,
+        noThemes: true,
+        noContextFiles: true,
+        appendSystemPrompt: subagentResources.appendSystemPrompt,
+      };
+      if (chatOnly) {
+        resourceLoaderOptions = {
+          ...resourceLoaderOptions,
+          systemPrompt: " ",
+          systemPromptOverride: () => undefined,
+        };
+      }
+    } else if (chatOnly) {
+      resourceLoaderOptions = CHAT_ONLY_RESOURCE_LOADER_OPTIONS;
+    } else {
+      resourceLoaderOptions = {
+        extensionFactories: [
+          createProjectCommandBashExtension({
+            cwd: sessionCwd,
+            settings: settingsManager,
+          }),
+          createSubagentExtension(
+            SUBAGENT_CONTROLLER.extensionRuntime,
+            () => listSubagentProfiles(sessionCwd),
+            isBuiltInSubagentsEnabled,
+          ),
+        ],
+        extensionsOverride: (base) => preferUserBashExtension(preferPiWebSubagentExtension(base)),
+      };
+    }
+
     const services = await createAgentSessionServices({
       cwd: sessionCwd,
       agentDir,
       settingsManager,
-      resourceLoaderOptions: subagentResources
-        ? {
-            noExtensions: !subagentResources.loadExtensions,
-            noSkills: !subagentResources.loadSkills,
-            noPromptTemplates: true,
-            noThemes: true,
-            noContextFiles: true,
-            ...(chatOnly
-              ? {
-                  systemPrompt: " ",
-                  systemPromptOverride: () => undefined,
-                }
-              : {}),
-            appendSystemPrompt: subagentResources.appendSystemPrompt,
-          }
-        : chatOnly
-          ? CHAT_ONLY_RESOURCE_LOADER_OPTIONS
-        : {
-            extensionFactories: [
-              createProjectCommandBashExtension({
-                cwd: sessionCwd,
-                settings: settingsManager,
-              }),
-              createSubagentExtension(
-                SUBAGENT_CONTROLLER.extensionRuntime,
-                () => listSubagentProfiles(sessionCwd),
-                isBuiltInSubagentsEnabled,
-              ),
-            ],
-            extensionsOverride: (base) => preferUserBashExtension(preferPiWebSubagentExtension(base)),
-          },
+      resourceLoaderOptions,
       ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
     });
     const scope = await resolveVisibleModels(
@@ -2066,7 +2100,9 @@ export async function startRpcSession(
       ...(subagentResources ? { excludeTools: [...SUBAGENT_CONTROL_TOOL_NAMES] } : {}),
     });
 
-    const persistedPreferences = await persistExplicitStartupPreferences(
+    const persistedPreferences = consultation
+      ? { modelDefaultChanged: false }
+      : await persistExplicitStartupPreferences(
       services.settingsManager,
       {
         ...(effectiveInitialModel ? { model: effectiveInitialModel } : {}),
@@ -2089,11 +2125,16 @@ export async function startRpcSession(
       inner.setActiveToolsByName(withExtensionTools(inner, selectedToolNames ?? inner.getActiveToolNames()));
     }
 
-    const exactSystemPrompt = chatOnly
-      ? subagentResources
-        ? () => subagentResources.appendSystemPrompt[0] ?? ""
-        : () => contextFilesSystemPrompt(inner.resourceLoader.getAgentsFiles().agentsFiles)
-      : undefined;
+    let exactSystemPrompt: (() => string) | undefined;
+    if (consultation) {
+      exactSystemPrompt = () => CONSULTATION_SYSTEM_PROMPT;
+    } else if (chatOnly) {
+      if (subagentResources) {
+        exactSystemPrompt = () => subagentResources.appendSystemPrompt[0] ?? "";
+      } else {
+        exactSystemPrompt = () => contextFilesSystemPrompt(inner.resourceLoader.getAgentsFiles().agentsFiles);
+      }
+    }
     const wrapper = new AgentSessionWrapper(inner, {
       exactSystemPrompt,
       chatOnly,
@@ -2102,7 +2143,7 @@ export async function startRpcSession(
           console.error("[pi-web] failed to send completion push:", error instanceof Error ? error.message : error);
         });
       },
-      suppressCompletionNotifications: Boolean(subagentResources),
+      suppressCompletionNotifications: consultation || Boolean(subagentResources),
     });
     const realSessionId = inner.sessionId as string;
     registerRpcWrapper(wrapper);

@@ -369,8 +369,8 @@ test("suppresses sounds and browser attention for the active subagent session", 
   assert.match(chatWindowSource, /completionNotificationsEnabled = session\?\.relation\?\.kind !== "subagent"/);
   assert.match(chatWindowSource, /completionNotificationsEnabled && soundEnabledRef\.current/);
   assert.match(chatWindowSource, /!completionNotificationsEnabled[\s\S]*?!extensionDialog/);
-  assert.match(completionSource, /selectedSession\?\.relation\?\.kind === "subagent"\) return/);
-  assert.match(attentionSource, /selectedSession\?\.relation\?\.kind === "subagent"\) return/);
+  assert.match(completionSource, /selectedSession\?\.relation\?\.kind === "subagent" \|\| selectedSession\?\.relation\?\.kind === "consultation"\) return/);
+  assert.match(attentionSource, /selectedSession\?\.relation\?\.kind === "subagent" \|\| selectedSession\?\.relation\?\.kind === "consultation"\) return/);
 });
 
 test("routes blocking extension requests through deduplicated browser attention notifications", () => {

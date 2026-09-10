@@ -5,7 +5,7 @@ export interface SessionTreeNode {
   children: SessionTreeNode[];
 }
 
-/** Build the sidebar hierarchy. Forks remain roots; only subagents nest. */
+/** Build the sidebar hierarchy. Forks remain roots; nested child relations nest. */
 export function buildSessionTree(sessions: SessionInfo[]): SessionTreeNode[] {
   const byId = new Map<string, SessionTreeNode>();
   for (const session of sessions) {
@@ -14,7 +14,7 @@ export function buildSessionTree(sessions: SessionInfo[]): SessionTreeNode[] {
 
   const parentOf = new Map<string, string>();
   for (const session of sessions) {
-    if (session.relation?.kind === "subagent") {
+    if (session.relation?.kind === "subagent" || session.relation?.kind === "consultation") {
       parentOf.set(session.id, session.relation.parentSessionId);
     }
   }
