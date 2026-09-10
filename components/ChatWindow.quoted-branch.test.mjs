@@ -17,4 +17,6 @@ test("offers compact quoting controls and sends selected sources to consultation
   assert.doesNotMatch(shellSource, /pendingQuotePrompt/);
   assert.equal((shellSource.match(/<ChatWindow\b/g) ?? []).length, 1);
   assert.match(chatSource, /role=\{quoteInputOpen \? "dialog" : "toolbar"\}/);
+  assert.match(chatSource, /onAskInNewChat && quotedSelection\.source && \(/);
+  assert.doesNotMatch(chatSource, /quotedSelection\.source && !sessionBusy/);
 });

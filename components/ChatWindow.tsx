@@ -1305,7 +1305,8 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
             <span aria-hidden="true" style={{ fontSize: 15 }}>@</span>
             <span>{t("chat.askInCurrent")}</span>
           </button>
-          {onAskInNewChat && quotedSelection.source && !sessionBusy && (
+          {/* Historical source blocks can be consulted while the parent turn runs. */}
+          {onAskInNewChat && quotedSelection.source && (
             <button
               type="button"
               className="file-viewer-icon-button"
