@@ -300,6 +300,24 @@ export type SubagentSessionStatus =
   | "aborted"
   | "interrupted";
 
+export type ConsultationContextMode = "selection" | "turn";
+export type ConsultationSourceKind = "assistant_text" | "thinking" | "tool_call" | "tool_result";
+
+export interface ConsultationSourceSummary {
+  kind: ConsultationSourceKind;
+  entryId?: string;
+  blockIndex?: number;
+  excerpt: string;
+}
+
+export interface ConsultationRelation {
+  kind: "consultation";
+  parentSessionId: string;
+  contextMode: ConsultationContextMode;
+  source: ConsultationSourceSummary;
+  promptVersion: number;
+}
+
 export interface SessionTreeNode {
   entry: SessionEntry;
   children: SessionTreeNode[];
@@ -328,7 +346,8 @@ export interface SessionInfo {
         profile: string;
         description: string;
         status: SubagentSessionStatus;
-      };
+      }
+    | ConsultationRelation;
   /** Main repo root shared by all worktrees of this cwd (cwd itself for non-git dirs).
    *  Always set by the server; optional because the client builds transient
    *  SessionInfo objects before the first refresh. Fall back to cwd. */
