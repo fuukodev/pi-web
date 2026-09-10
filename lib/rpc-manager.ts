@@ -170,6 +170,8 @@ export interface RpcSessionStartOptions {
   thinkingLevel?: ThinkingLevel;
   /** Starts a persisted consultation child with no project resources. */
   consultation?: boolean;
+  /** Reuses a pre-seeded manager so custom relation metadata is not lost before the first assistant message. */
+  sessionManager?: SessionManager;
 }
 
 const CODING_TOOL_NAMES = ["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"];
@@ -1951,7 +1953,9 @@ export async function startRpcSession(
   if (inflight) return inflight;
 
   let sessionManager: SessionManager;
-  if (sessionFile) {
+  if (options.sessionManager) {
+    sessionManager = options.sessionManager;
+  } else if (sessionFile) {
     sessionManager = SessionManager.open(sessionFile, undefined);
   } else {
     if (!cwd) throw new Error("cwd is required for a new session");

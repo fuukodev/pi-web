@@ -345,23 +345,34 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
     const end = range.endContainer.nodeType === Node.ELEMENT_NODE
       ? range.endContainer as Element
       : range.endContainer.parentElement;
-    const sourceElement = [ancestor, start, end]
+    const selectionElements = [ancestor, start, end];
+    const sourceElement = selectionElements
       .map((element) => element?.closest<HTMLElement>("[data-consultation-kind]"))
       .find((element) => Boolean(element?.dataset.consultationEntryId));
+    const textElement = selectionElements
+      .map((element) => element?.closest<HTMLElement>("[data-message-text]"))
+      .find((element) => Boolean(element));
+    const assistantElement = selectionElements
+      .map((element) => element?.closest<HTMLElement>("[data-message-role=\"assistant\"]"))
+      .find((element) => Boolean(element?.dataset.entryId));
     const entryId = sourceElement?.dataset.consultationEntryId;
-    const rawBlockIndex = sourceElement?.dataset.consultationBlockIndex;
+    const rawBlockIndex = sourceElement?.dataset.consultationBlockIndex
+      ?? textElement?.dataset.messageBlockIndex;
     const blockIndex = rawBlockIndex === undefined ? undefined : Number(rawBlockIndex);
     const rawKind = sourceElement?.dataset.consultationKind;
     const kind = rawKind === "assistant_text" || rawKind === "thinking" || rawKind === "tool_call" || rawKind === "tool_result"
       ? rawKind
       : undefined;
+    const source: { kind: ConsultationSourceKind; entryId: string; blockIndex: number } | undefined = entryId && kind !== undefined && blockIndex !== undefined && Number.isInteger(blockIndex) && blockIndex >= 0
+      ? { kind, entryId, blockIndex }
+      : assistantElement?.dataset.entryId && blockIndex !== undefined && Number.isInteger(blockIndex) && blockIndex >= 0
+        ? { kind: "assistant_text", entryId: assistantElement.dataset.entryId, blockIndex }
+        : undefined;
     setQuotedSelection({
       text,
       top: Math.min(window.innerHeight - 44, rect.bottom + 8),
       left: Math.max(64, Math.min(window.innerWidth - 64, rect.left + rect.width / 2)),
-      ...(entryId && kind !== undefined && blockIndex !== undefined && Number.isInteger(blockIndex) && blockIndex >= 0
-        ? { source: { kind, entryId, blockIndex } }
-        : {}),
+      ...(source ? { source } : {}),
     });
   }, [quoteSelectionEnabled, quoteInputOpen]);
 

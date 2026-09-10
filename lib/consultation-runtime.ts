@@ -209,6 +209,7 @@ export async function createConsultationSession(
     started = await startRpcSession(sessionId, sessionFile, parentHeader.cwd, {
       toolNames: [],
       consultation: true,
+      sessionManager: childManager,
       ...(parentState.model ? { initialModel: parentState.model } : {}),
       ...(parentState.thinkingLevel ? { thinkingLevel: parentState.thinkingLevel } : {}),
     });

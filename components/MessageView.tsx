@@ -611,6 +611,17 @@ function AssistantMessageView({
     .map((block, originalIndex) => ({ block, originalIndex }))
     .filter(({ block }) => !isEmptyThinkingBlock(block, { isStreaming })), [message.content, isStreaming]);
   const blocks = useMemo(() => blockItems.map(({ block }) => block), [blockItems]);
+  const textBlockItems = blockItems.filter(({ block }) => block.type === "text");
+  // Keep a resilient source anchor on simple assistant answers. The block-level
+  // marker remains authoritative for multi-block messages, but this fallback
+  // lets selection continue to work if a renderer omits nested data attributes.
+  const consultationContainerAttributes = entryId && textBlockItems.length === 1
+    ? {
+        "data-consultation-kind": "assistant_text",
+        "data-consultation-entry-id": entryId,
+        "data-consultation-block-index": textBlockItems[0].originalIndex,
+      }
+    : {};
   const providerError = getAssistantErrorMessage(message, { isStreaming });
   const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -735,6 +746,7 @@ function AssistantMessageView({
     <div
       data-message-role="assistant"
       data-entry-id={entryId}
+      {...consultationContainerAttributes}
       style={{ marginBottom: 16 }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -863,7 +875,7 @@ function AssistantMessageView({
 
 function BlockView({ block, searchTarget, toolResults, isStreaming, streamingDuration, toolCallDurations, cwd, onOpenFile, onOpenSession, sessionId, entryId, blockIndex }: { block: AssistantContentBlock; searchTarget?: boolean; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number>; cwd?: string; onOpenFile?: (filePath: string) => void; onOpenSession?: (sessionId: string) => void; sessionId?: string; entryId?: string; blockIndex: number }) {
   if (block.type === "text") {
-    return <div data-message-text data-search-target={searchTarget || undefined} data-consultation-kind="assistant_text" data-consultation-entry-id={entryId} data-consultation-block-index={blockIndex}><TextBlock block={block as TextContent} isStreaming={isStreaming} cwd={cwd} onOpenFile={onOpenFile} /></div>;
+    return <div data-message-text data-message-block-index={blockIndex} data-search-target={searchTarget || undefined} data-consultation-kind="assistant_text" data-consultation-entry-id={entryId} data-consultation-block-index={blockIndex}><TextBlock block={block as TextContent} isStreaming={isStreaming} cwd={cwd} onOpenFile={onOpenFile} /></div>;
   }
   if (block.type === "thinking") {
     return <ThinkingBlock block={block as ThinkingContent} duration={streamingDuration} sessionId={sessionId} entryId={entryId} blockIndex={blockIndex} />;

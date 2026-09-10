@@ -220,6 +220,7 @@ test("marks persisted assistant messages with their source entry", () => {
   assert.match(html, /data-consultation-kind="assistant_text"/);
   assert.match(html, /data-consultation-entry-id="assistant-entry"/);
   assert.match(html, /data-consultation-block-index="0"/);
+  assert.match(html, /data-message-block-index="0"/);
 });
 
 test("marks tool-call source coordinates for consultation selection", () => {

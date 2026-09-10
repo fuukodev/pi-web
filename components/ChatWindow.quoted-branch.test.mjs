@@ -9,6 +9,8 @@ test("offers compact quoting controls and sends selected sources to consultation
   assert.match(chatSource, /onPointerUp=\{captureQuotedSelection\}/);
   assert.match(chatSource, /data-consultation-kind/);
   assert.match(chatSource, /closest<HTMLElement>\("\[data-consultation-kind\]"/);
+  assert.match(chatSource, /closest<HTMLElement>\("\[data-message-text\]"/);
+  assert.match(chatSource, /closest<HTMLElement>\("\[data-message-role=\\"assistant\\"\]"/);
   assert.match(chatSource, /chatInputRef\?\.current\?\.insertText\(buildQuotedSelection/);
   assert.match(chatSource, /onAskInNewChat\([\s\S]*?sourceSessionId,[\s\S]*?quotedSelection\.source/);
   assert.match(chatSource, /quoteContextMode/);
