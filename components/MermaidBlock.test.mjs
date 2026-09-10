@@ -75,6 +75,14 @@ test("CodeBlock highlights code when not streaming", () => {
   assert.match(html, /const/);
 });
 
+test("CodeBlock keeps the root background on one CSS property", () => {
+  const html = renderCode({ code: "const x = 1;", lang: "javascript" });
+  const preTag = html.match(/<pre[^>]*>/)?.[0] ?? "";
+
+  assert.match(preTag, /background-color:/);
+  assert.doesNotMatch(preTag, /(?:^|;)background:/);
+});
+
 test("CodeBlock renders plain text without tokenization while streaming", () => {
   const html = renderCode({ code: "const x = 1;", lang: "javascript", isStreaming: true });
 
