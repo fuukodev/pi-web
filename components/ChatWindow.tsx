@@ -88,6 +88,9 @@ function phaseLabel(phase: AgentPhase, t: (key: string, params?: Record<string, 
 
 const CHAT_MINIMAP_WIDTH = 36;
 const CHAT_COLUMN_PADDING = 16;
+// Keep selection actions above sidebar/top-panel surfaces (up to z-index 500),
+// while leaving modal dialogs (z-index 1000+) on top.
+const QUOTE_POPOVER_Z_INDEX = 600;
 
 function NewSessionUpdateLink({
   label,
@@ -1255,7 +1258,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
             position: "fixed",
             top: quotedSelection.top,
             left: quotedSelection.left,
-            zIndex: 130,
+            zIndex: QUOTE_POPOVER_Z_INDEX,
             display: "flex",
             flexWrap: "wrap",
             gap: 3,
