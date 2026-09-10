@@ -27,6 +27,7 @@ import { FrontmatterCard } from "./FrontmatterCard";
 import { parseUnifiedPatch } from "@/lib/patch";
 import type { GitFileDiffResponse } from "@/lib/git-types";
 import { useI18n } from "@/hooks/useI18n";
+import { normalizeSyntaxHighlighterStyle } from "@/lib/syntax-highlighter-style";
 import {
   resolveInitialFileDisplayMode,
   type FileViewerDisplayMode as DisplayMode,
@@ -86,6 +87,9 @@ const FILE_LINE_NUMBER_STYLE: CSSProperties = {
   flexShrink: 0,
   verticalAlign: "top",
 };
+
+const LIGHT_SYNTAX_STYLE = normalizeSyntaxHighlighterStyle(vs);
+const DARK_SYNTAX_STYLE = normalizeSyntaxHighlighterStyle(vscDarkPlus);
 
 type SourceCodeRendererProps = Parameters<NonNullable<SyntaxHighlighterProps["renderer"]>>[0] & {
   wrapLines: boolean;
@@ -1373,7 +1377,7 @@ function TextFileViewer({
       <SyntaxHighlighter
         className={wrapLines ? "file-source-view is-wrapped" : "file-source-view"}
         language={language === "text" ? "plaintext" : language}
-        style={isDark ? vscDarkPlus : vs}
+        style={isDark ? DARK_SYNTAX_STYLE : LIGHT_SYNTAX_STYLE}
         showLineNumbers
         lineNumberStyle={{
           ...FILE_LINE_NUMBER_STYLE,
@@ -1382,7 +1386,7 @@ function TextFileViewer({
           margin: 0,
           padding: 0,
           border: 0,
-          background: "var(--bg)",
+          backgroundColor: "var(--bg)",
           ...FILE_CODE_STYLE,
           width: wrapLines ? "100%" : "max-content",
           minWidth: "100%",
