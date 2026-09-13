@@ -2,7 +2,7 @@
 import { registerAbortHandler } from "@/hooks/useKeyboardShortcuts";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import type { AgentMessage, AssistantContentBlock, AssistantMessage, BashExecutionMessage, BlockingExtensionUiRequest, ExtensionUiRequest, SessionInfo, SessionTreeNode, ToolResultMessage, UserMessage } from "@/lib/types";
+import type { AgentMessage, AssistantContentBlock, AssistantMessage, BashExecutionMessage, BlockingExtensionUiRequest, ConsultationContextMode, ConsultationSourceKind, ExtensionUiRequest, SessionInfo, SessionTreeNode, ToolResultMessage, UserMessage } from "@/lib/types";
 import { normalizeCustomPanelLines } from "@/lib/ansi";
 import { asBracketedPaste, toTerminalKeyData } from "@/lib/terminal-input";
 import { countToolCallBlocks, getAssistantErrorMessage, getDisplayableAssistantBlocks, isMessageGroupAnchor, splitFinalAssistantBlocks } from "@/lib/message-display";
@@ -54,10 +54,13 @@ interface Props {
   onContextUsageChange?: (usage: { percent: number | null; contextWindow: number; tokens: number | null } | null) => void;
   onOpenFile?: (filePath: string) => void;
   onOpenSession?: (sessionId: string) => void;
-  onAskInNewChat?: (prompt: string, sourceSessionId: string, sourceEntryId: string) => Promise<void>;
+  onAskInNewChat?: (
+    question: string,
+    sourceSessionId: string,
+    source: { kind: ConsultationSourceKind; entryId: string; blockIndex: number; text: string },
+    contextMode: ConsultationContextMode,
+  ) => Promise<void>;
   quoteSelectionEnabled?: boolean;
-  initialPrompt?: string;
-  onInitialPromptConsumed?: () => void;
   /** Completion sound state + controls, owned by AppShell so tasks finishing in
    *  a non-active workspace can still ring. */
   soundEnabled?: boolean;
@@ -85,6 +88,9 @@ function phaseLabel(phase: AgentPhase, t: (key: string, params?: Record<string, 
 
 const CHAT_MINIMAP_WIDTH = 36;
 const CHAT_COLUMN_PADDING = 16;
+// Keep selection actions above sidebar/top-panel surfaces (up to z-index 500),
+// while leaving modal dialogs (z-index 1000+) on top.
+const QUOTE_POPOVER_Z_INDEX = 600;
 
 function NewSessionUpdateLink({
   label,
@@ -238,10 +244,10 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
   );
 }
 
-export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, onOpenSession, onAskInNewChat, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
+export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, onOpenSession, onAskInNewChat, quoteSelectionEnabled = false, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
-  const completionNotificationsEnabled = session?.relation?.kind !== "subagent";
+  const completionNotificationsEnabled = session?.relation?.kind !== "subagent" && session?.relation?.kind !== "consultation";
 
   // Wrap onAgentEnd to play the completion sound. This is more reliable than
   // wrapping handleAgentEventRef because useAgentSession overwrites that ref
@@ -299,9 +305,10 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
     text: string;
     top: number;
     left: number;
-    sourceEntryId?: string;
+    source?: { kind: ConsultationSourceKind; entryId: string; blockIndex: number };
   } | null>(null);
   const [quoteInputOpen, setQuoteInputOpen] = useState(false);
+  const [quoteContextMode, setQuoteContextMode] = useState<ConsultationContextMode>("selection");
   const [quoteSubmitting, setQuoteSubmitting] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const quotePopoverRef = useRef<HTMLDivElement | null>(null);
@@ -309,6 +316,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   const closeQuotedSelection = useCallback(() => {
     setQuotedSelection(null);
     setQuoteInputOpen(false);
+    setQuoteContextMode("selection");
     setQuoteError(null);
   }, []);
 
@@ -340,25 +348,36 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
     const end = range.endContainer.nodeType === Node.ELEMENT_NODE
       ? range.endContainer as Element
       : range.endContainer.parentElement;
-    const sourceEntryId = [ancestor, start, end]
-      .map((element) => element?.closest<HTMLElement>("[data-message-role=\"assistant\"]")?.dataset.entryId)
-      .find((entryId): entryId is string => Boolean(entryId));
+    const selectionElements = [ancestor, start, end];
+    const sourceElement = selectionElements
+      .map((element) => element?.closest<HTMLElement>("[data-consultation-kind]"))
+      .find((element) => Boolean(element?.dataset.consultationEntryId));
+    const textElement = selectionElements
+      .map((element) => element?.closest<HTMLElement>("[data-message-text]"))
+      .find((element) => Boolean(element));
+    const assistantElement = selectionElements
+      .map((element) => element?.closest<HTMLElement>("[data-message-role=\"assistant\"]"))
+      .find((element) => Boolean(element?.dataset.entryId));
+    const entryId = sourceElement?.dataset.consultationEntryId;
+    const rawBlockIndex = sourceElement?.dataset.consultationBlockIndex
+      ?? textElement?.dataset.messageBlockIndex;
+    const blockIndex = rawBlockIndex === undefined ? undefined : Number(rawBlockIndex);
+    const rawKind = sourceElement?.dataset.consultationKind;
+    const kind = rawKind === "assistant_text" || rawKind === "thinking" || rawKind === "tool_call" || rawKind === "tool_result"
+      ? rawKind
+      : undefined;
+    const source: { kind: ConsultationSourceKind; entryId: string; blockIndex: number } | undefined = entryId && kind !== undefined && blockIndex !== undefined && Number.isInteger(blockIndex) && blockIndex >= 0
+      ? { kind, entryId, blockIndex }
+      : assistantElement?.dataset.entryId && blockIndex !== undefined && Number.isInteger(blockIndex) && blockIndex >= 0
+        ? { kind: "assistant_text", entryId: assistantElement.dataset.entryId, blockIndex }
+        : undefined;
     setQuotedSelection({
       text,
       top: Math.min(window.innerHeight - 44, rect.bottom + 8),
       left: Math.max(64, Math.min(window.innerWidth - 64, rect.left + rect.width / 2)),
-      sourceEntryId,
+      ...(source ? { source } : {}),
     });
   }, [quoteSelectionEnabled, quoteInputOpen]);
-
-  useEffect(() => {
-    if (!quoteInputOpen || !quotedSelection) return;
-    quoteChatInputRef.current?.insertIfEmpty(buildQuotedSelection(
-      quotedSelection.text,
-      t("chat.quoteIntro"),
-      t("chat.quoteQuestion"),
-    ));
-  }, [quoteInputOpen, quotedSelection, t]);
 
   useLayoutEffect(() => {
     const popover = quotePopoverRef.current;
@@ -417,7 +436,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
 
   const askSelectionInNewChat = useCallback(async (prompt: string) => {
     const sourceSessionId = sessionIdRef.current ?? session?.id;
-    if (quoteSubmitting || !prompt.trim() || !quotedSelection?.sourceEntryId || !sourceSessionId || !onAskInNewChat) return;
+    if (quoteSubmitting || !prompt.trim() || !quotedSelection?.source || !sourceSessionId || !onAskInNewChat) return;
     setQuoteSubmitting(true);
     setQuoteError(null);
     unlockAudio?.();
@@ -425,7 +444,8 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
       await onAskInNewChat(
         prompt,
         sourceSessionId,
-        quotedSelection.sourceEntryId,
+        { ...quotedSelection.source, text: quotedSelection.text },
+        quoteContextMode,
       );
       closeQuotedSelection();
     } catch (error) {
@@ -434,15 +454,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
     } finally {
       setQuoteSubmitting(false);
     }
-  }, [onAskInNewChat, quotedSelection, quoteSubmitting, session?.id, sessionIdRef, closeQuotedSelection, unlockAudio]);
-
-  const initialPromptSentRef = useRef(false);
-  useEffect(() => {
-    if (loading || error || !initialPrompt || initialPromptSentRef.current) return;
-    initialPromptSentRef.current = true;
-    onInitialPromptConsumed?.();
-    void handleSend(initialPrompt);
-  }, [initialPrompt, loading, error, handleSend, onInitialPromptConsumed]);
+  }, [onAskInNewChat, quoteContextMode, quotedSelection, quoteSubmitting, session?.id, sessionIdRef, closeQuotedSelection, unlockAudio]);
 
   useEffect(() => {
     if (
@@ -1246,7 +1258,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
             position: "fixed",
             top: quotedSelection.top,
             left: quotedSelection.left,
-            zIndex: 130,
+            zIndex: QUOTE_POPOVER_Z_INDEX,
             display: "flex",
             flexWrap: "wrap",
             gap: 3,
@@ -1273,9 +1285,21 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
                 </button>
               </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-muted)" }}>
+                <span>{t("chat.consultationContext")}</span>
+                <select
+                  value={quoteContextMode}
+                  onChange={(event) => setQuoteContextMode(event.target.value as ConsultationContextMode)}
+                  style={{ flex: 1, minWidth: 0, padding: "5px 7px", border: "1px solid var(--border)", borderRadius: 5, background: "var(--bg-panel)", color: "var(--text)", fontSize: 11 }}
+                >
+                  <option value="selection">{t("chat.consultationSelectionOnly")}</option>
+                  <option value="turn">{t("chat.consultationCurrentTurn")}</option>
+                </select>
+              </label>
               <ChatInput
                 ref={quoteChatInputRef}
                 compact
+                placeholder={t("chat.quoteQuestion")}
                 onSend={askSelectionInNewChat}
                 onAbort={closeQuotedSelection}
                 isStreaming={false}
@@ -1295,7 +1319,8 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
             <span aria-hidden="true" style={{ fontSize: 15 }}>@</span>
             <span>{t("chat.askInCurrent")}</span>
           </button>
-          {onAskInNewChat && quotedSelection.sourceEntryId && !sessionBusy && (
+          {/* Historical source blocks can be consulted while the parent turn runs. */}
+          {onAskInNewChat && quotedSelection.source && (
             <button
               type="button"
               className="file-viewer-icon-button"

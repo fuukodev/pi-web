@@ -12,7 +12,9 @@ export async function GET(request: Request) {
   }
   try {
     // Paths come only from the same catalog used by the sidebar.
-    const sessions = query && !request.signal.aborted ? await listAllSessions() : [];
+    const sessions = query && !request.signal.aborted
+      ? (await listAllSessions()).filter((session) => session.relation?.kind !== "consultation")
+      : [];
     return NextResponse.json(await searchSessionContents(sessions, query, request.signal), { headers });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500, headers });

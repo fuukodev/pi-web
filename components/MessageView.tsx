@@ -611,6 +611,17 @@ function AssistantMessageView({
     .map((block, originalIndex) => ({ block, originalIndex }))
     .filter(({ block }) => !isEmptyThinkingBlock(block, { isStreaming })), [message.content, isStreaming]);
   const blocks = useMemo(() => blockItems.map(({ block }) => block), [blockItems]);
+  const textBlockItems = blockItems.filter(({ block }) => block.type === "text");
+  // Keep a resilient source anchor on simple assistant answers. The block-level
+  // marker remains authoritative for multi-block messages, but this fallback
+  // lets selection continue to work if a renderer omits nested data attributes.
+  const consultationContainerAttributes = entryId && textBlockItems.length === 1
+    ? {
+        "data-consultation-kind": "assistant_text",
+        "data-consultation-entry-id": entryId,
+        "data-consultation-block-index": textBlockItems[0].originalIndex,
+      }
+    : {};
   const providerError = getAssistantErrorMessage(message, { isStreaming });
   const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -735,6 +746,7 @@ function AssistantMessageView({
     <div
       data-message-role="assistant"
       data-entry-id={entryId}
+      {...consultationContainerAttributes}
       style={{ marginBottom: 16 }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -863,7 +875,7 @@ function AssistantMessageView({
 
 function BlockView({ block, searchTarget, toolResults, isStreaming, streamingDuration, toolCallDurations, cwd, onOpenFile, onOpenSession, sessionId, entryId, blockIndex }: { block: AssistantContentBlock; searchTarget?: boolean; toolResults?: Map<string, ToolResultMessage>; isStreaming?: boolean; streamingDuration?: number; toolCallDurations?: Map<string, number>; cwd?: string; onOpenFile?: (filePath: string) => void; onOpenSession?: (sessionId: string) => void; sessionId?: string; entryId?: string; blockIndex: number }) {
   if (block.type === "text") {
-    return <div data-message-text data-search-target={searchTarget || undefined}><TextBlock block={block as TextContent} isStreaming={isStreaming} cwd={cwd} onOpenFile={onOpenFile} /></div>;
+    return <div data-message-text data-message-block-index={blockIndex} data-search-target={searchTarget || undefined} data-consultation-kind="assistant_text" data-consultation-entry-id={entryId} data-consultation-block-index={blockIndex}><TextBlock block={block as TextContent} isStreaming={isStreaming} cwd={cwd} onOpenFile={onOpenFile} /></div>;
   }
   if (block.type === "thinking") {
     return <ThinkingBlock block={block as ThinkingContent} duration={streamingDuration} sessionId={sessionId} entryId={entryId} blockIndex={blockIndex} />;
@@ -872,7 +884,7 @@ function BlockView({ block, searchTarget, toolResults, isStreaming, streamingDur
     const tc = block as ToolCallContent;
     const result = toolResults?.get(tc.toolCallId);
     const duration = toolCallDurations?.get(tc.toolCallId);
-    return <ToolCallBlock block={tc} result={result} duration={duration} onOpenSession={onOpenSession} />;
+    return <ToolCallBlock block={tc} result={result} duration={duration} onOpenSession={onOpenSession} entryId={entryId} blockIndex={blockIndex} />;
   }
   return null;
 }
@@ -945,7 +957,7 @@ export function ThinkingBlock({ block, duration, sessionId, entryId, blockIndex 
       fontFamily: "var(--font-mono)",
       fontSize: "calc(11px + var(--chat-font-size-offset, 0px))",
       lineHeight: 1.5,
-    }}>
+    }} data-consultation-kind="thinking" data-consultation-entry-id={entryId} data-consultation-block-index={blockIndex}>
       <button
         type="button"
         aria-expanded={expanded}
@@ -1002,7 +1014,7 @@ function isSubagentToolDetails(value: unknown): value is SubagentToolDetails {
   return details.kind === "pi-web-subagent" && typeof details.sessionId === "string";
 }
 
-function ToolCallBlock({ block, result, duration, onOpenSession }: { block: ToolCallContent; result?: ToolResultMessage; duration?: number; onOpenSession?: (sessionId: string) => void }) {
+function ToolCallBlock({ block, result, duration, onOpenSession, entryId, blockIndex }: { block: ToolCallContent; result?: ToolResultMessage; duration?: number; onOpenSession?: (sessionId: string) => void; entryId?: string; blockIndex: number }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const inputStr = getToolCallInputText(block);
@@ -1018,6 +1030,13 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
   const resultIsEmpty = resultText === null ? false : (resultText.trim() === "(no output)" || resultText.trim() === "");
   const isError = result?.isError ?? false;
   const subagent = isSubagentToolDetails(result?.details) ? result.details : null;
+  const consultationSourceAttributes = entryId
+    ? {
+        "data-consultation-kind": "tool_call",
+        "data-consultation-entry-id": entryId,
+        "data-consultation-block-index": blockIndex,
+      }
+    : {};
 
   return (
     <div
@@ -1028,6 +1047,7 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
         border: isError ? "1px solid rgba(248,113,113,0.45)" : "1px solid rgba(34,197,94,0.25)",
         background: isError ? "rgba(248,113,113,0.05)" : "rgba(34,197,94,0.04)",
       }}
+      {...consultationSourceAttributes}
     >
       {/* ── Tool call header ── */}
       <div style={{ display: "flex", alignItems: "stretch", minWidth: 0 }}>
@@ -1099,6 +1119,8 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
         resultDiff ? (
           <PairedDiffResult
             diff={resultDiff}
+            entryId={entryId}
+            blockIndex={blockIndex}
           />
         ) : (
           <PairedResult
@@ -1106,6 +1128,8 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
             images={resultImages}
             isEmpty={resultIsEmpty}
             isError={isError}
+            entryId={entryId}
+            blockIndex={blockIndex}
           />
         )
       )}
@@ -1117,15 +1141,25 @@ interface ResultDiff {
   text: string;
 }
 
-function PairedDiffResult({ diff }: {
+function PairedDiffResult({ diff, entryId, blockIndex }: {
   diff: ResultDiff;
+  entryId?: string;
+  blockIndex: number;
 }) {
+  const consultationSourceAttributes = entryId
+    ? {
+        "data-consultation-kind": "tool_result",
+        "data-consultation-entry-id": entryId,
+        "data-consultation-block-index": blockIndex,
+      }
+    : {};
   return (
     <div
       style={{
         borderTop: "1px solid rgba(34,197,94,0.15)",
         background: "var(--bg)",
       }}
+      {...consultationSourceAttributes}
     >
       <SplitPatchView text={diff.text} />
     </div>
@@ -1349,20 +1383,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function PairedResult({ text, images, isEmpty, isError }: {
+function PairedResult({ text, images, isEmpty, isError, entryId, blockIndex }: {
   text: string;
   images: ImageContent[];
   isEmpty: boolean;
   isError: boolean;
+  entryId?: string;
+  blockIndex: number;
 }) {
   const { t } = useI18n();
   const showText = !isEmpty || images.length === 0;
+  const consultationSourceAttributes = entryId
+    ? {
+        "data-consultation-kind": "tool_result",
+        "data-consultation-entry-id": entryId,
+        "data-consultation-block-index": blockIndex,
+      }
+    : {};
   return (
     <div
       style={{
         borderTop: `1px solid ${isError ? "rgba(248,113,113,0.3)" : "rgba(34,197,94,0.15)"}`,
         background: isError ? "rgba(248,113,113,0.04)" : "var(--bg-subtle)",
       }}
+      {...consultationSourceAttributes}
     >
       {images.length > 0 && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "10px", background: "var(--bg)" }}>
@@ -1854,7 +1898,7 @@ function BashExecutionView({ message, sessionId }: { message: BashExecutionMessa
 
   return (
     <div style={{ margin: "6px 0" }}>
-      <ToolCallBlock block={block} result={result} />
+      <ToolCallBlock block={block} result={result} blockIndex={0} />
       {message.truncated && fullOutputUrl && (
         <div style={{ padding: "4px 10px", fontSize: 11, marginTop: -1 }}>
           {showFullButton && (

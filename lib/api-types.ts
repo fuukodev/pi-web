@@ -1,5 +1,6 @@
 import type { ResourceDiagnostic } from "@earendil-works/pi-coding-agent";
 import type { SubagentProfile } from "./subagents";
+import type { ConsultationContextMode, ConsultationSourceKind, ConsultationSourceSummary, SessionInfo } from "./types";
 
 export interface SubagentProfilesResponse {
   profiles: SubagentProfile[];
@@ -82,6 +83,32 @@ export interface AppUpdateResponse {
 
 export interface PushConfigResponse {
   publicKey: string;
+}
+
+export interface ConsultationSourceInput {
+  kind: ConsultationSourceKind;
+  entryId: string;
+  blockIndex: number;
+  text: string;
+}
+
+export interface CreateConsultationRequest {
+  contextMode: ConsultationContextMode;
+  question: string;
+  source: ConsultationSourceInput;
+}
+
+export interface CreateConsultationResponse {
+  sessionId: string;
+  parentSessionId: string;
+  contextMode: ConsultationContextMode;
+  source: ConsultationSourceSummary;
+}
+
+export interface ConsultationChildrenResponse {
+  parentSessionId: string;
+  children: SessionInfo[];
+  nextCursor?: string;
 }
 
 export type PluginScope = "global" | "project";

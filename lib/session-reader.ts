@@ -13,13 +13,18 @@ import { sessionPathKey } from "./session-path";
 import { MAX_TOOL_RESULT_IMAGE_BYTES, TOOL_RESULT_IMAGE_MIMES } from "./tool-result-images";
 import { resolveProject, type ProjectInfo } from "./worktree";
 import { readSubagentRun, SUBAGENT_META_TYPE } from "./subagents";
+import { readConsultationMetadata } from "./session-consultation";
+import { buildSessionRelation } from "./session-relation";
 import { listSessionsIncremental } from "./session-list-scanner";
 
 export { getAgentDir };
 
 const SESSION_HEADER_MAX_BYTES = 64 * 1024;
 const SESSION_RELATION_MAX_BYTES = 256 * 1024;
-const SESSION_RELATION_MAX_LINES = 2;
+// Relation metadata is normally the first custom entry, but startup may append
+// model/thinking state before the owner adds its marker. Read a small bounded
+// prefix instead of assuming the marker is exactly line two.
+const SESSION_RELATION_MAX_LINES = 32;
 const SESSION_RESULT_MAX_BYTES = 256 * 1024;
 
 function readBoundedLines(filePath: string, maxBytes: number, maxLines: number): string[] {
@@ -149,11 +154,23 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
     cacheSessionPath(s.id, s.path);
     const originSessionId = s.parentSessionPath ? pathToId.get(sessionPathKey(s.parentSessionPath)) : undefined;
     let subagent = null;
+    let consultation = null;
     if (s.parentSessionPath) {
       try {
-        subagent = readSubagentRun(readSessionRelationEntries(s.path), s.id, s.path);
+        const relationEntries = readSessionRelationEntries(s.path);
+        subagent = readSubagentRun(relationEntries, s.id, s.path);
+        consultation = readConsultationMetadata(relationEntries);
       } catch { /* malformed or concurrently removed session */ }
     }
+    const relation = buildSessionRelation({
+      consultation,
+      subagent,
+      parentSessionPath: s.parentSessionPath,
+      originSessionId,
+    });
+    const relationParentId = relation && "parentSessionId" in relation
+      ? relation.parentSessionId
+      : originSessionId;
     return {
       path: s.path,
       id: s.id,
@@ -163,12 +180,8 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
       modified: s.modified.toISOString(),
       messageCount: s.messageCount,
       firstMessage: s.firstMessage || "(no messages)",
-      parentSessionId: originSessionId,
-      ...(subagent
-        ? { relation: { kind: "subagent" as const, parentSessionId: subagent.parentSessionId, profile: subagent.profile, description: subagent.description, status: subagent.status } }
-        : s.parentSessionPath
-          ? { relation: { kind: "fork" as const, ...(originSessionId ? { originSessionId } : {}) } }
-          : {}),
+      ...(relationParentId ? { parentSessionId: relationParentId } : {}),
+      ...(relation ? { relation } : {}),
       transient: false,
     };
   });

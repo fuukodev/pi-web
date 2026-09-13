@@ -15,6 +15,7 @@ import { BranchNavigator, hasSessionBranches } from "./BranchNavigator";
 import { SystemPromptPanel } from "./SystemPromptPanel";
 import { ToolDefinitionsPanel } from "./ToolDefinitionsPanel";
 import { AgentSessionPanel } from "./AgentSessionPanel";
+import { ConsultationSessionPanel } from "./ConsultationSessionPanel";
 import { TerminalPanel } from "./TerminalPanel";
 import { newTerminalTab, restoreTerminalTabs, TERMINAL_TABS_KEY, type TerminalTab } from "./terminal-tab-state";
 import { useTheme } from "@/hooks/useTheme";
@@ -24,7 +25,6 @@ import { useViewportHeight } from "@/hooks/useViewportHeight";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { useAudio } from "@/hooks/useAudio";
 import { copyText } from "@/lib/clipboard";
-import { sendAgentCommand } from "@/lib/agent-client";
 import { getFileName } from "@/lib/file-paths";
 import { buildAtMentionText, buildFileAtMentionsText, buildFileLineMentionText } from "@/lib/file-fuzzy";
 import {
@@ -52,7 +52,7 @@ import {
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
 } from "@/lib/panel-layout";
-import type { BlockingExtensionUiRequest, SessionInfo, SessionTreeNode } from "@/lib/types";
+import type { BlockingExtensionUiRequest, ConsultationContextMode, ConsultationSourceKind, SessionInfo, SessionTreeNode } from "@/lib/types";
 import type { ProjectTrustStatus } from "@/lib/api-types";
 import type { ChatInputHandle } from "./ChatInput";
 import type { SessionStatsInfo } from "@/lib/pi-types";
@@ -73,6 +73,7 @@ type AutoNameStatus =
 const TOP_BAR_ICON_BUTTON_SIZE = 36;
 const LANGUAGE_MENU_WIDTH = 176;
 const AGENT_PANEL_WIDTH = 420;
+const CONSULTATION_PANEL_WIDTH = 420;
 
 function parkedNewSessionDraftKey(cwd: string): string {
   return `parked-new:${cwd}`;
@@ -139,6 +140,7 @@ export function AppShell() {
     [selectedSession?.id, sessionsWithSelection],
   );
   const hasSubagentSessions = Boolean(activeSessionFamily?.subagents.length);
+  const hasConsultationSessions = Boolean(activeSessionFamily?.consultations.length);
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
   const handleRunningSessionIdsChange = useCallback((ids: Set<string>) => {
     setRunningSessionIds((previous) => {
@@ -249,7 +251,6 @@ export function AppShell() {
     reclampRightPanelWidth();
   }, [reclampRightPanelWidth, reclampSidebarWidth, rightPanelOpen]);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
-  const [pendingQuotePrompt, setPendingQuotePrompt] = useState<{ sessionId: string; text: string } | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
   const mobileToolbarRef = useRef<HTMLDivElement>(null);
   const languageBtnRef = useRef<HTMLButtonElement>(null);
@@ -325,7 +326,7 @@ export function AppShell() {
   }, []);
 
   // Single active panel — only one dropdown open at a time
-  const [activeTopPanel, setActiveTopPanel] = useState<"agents" | "branches" | "system" | "tools" | "session" | "language" | null>(null);
+  const [activeTopPanel, setActiveTopPanel] = useState<"agents" | "consultations" | "branches" | "system" | "tools" | "session" | "language" | null>(null);
   const [topPanelPos, setTopPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
   useEffect(() => {
@@ -335,13 +336,19 @@ export function AppShell() {
   }, [sessionHasBranches]);
 
   useEffect(() => {
+    if (!hasConsultationSessions) {
+      setActiveTopPanel((panel) => panel === "consultations" ? null : panel);
+    }
+  }, [hasConsultationSessions]);
+
+  useEffect(() => {
     if (!hasSubagentSessions) {
       setActiveTopPanel((panel) => panel === "agents" ? null : panel);
     }
   }, [hasSubagentSessions]);
 
   const toggleTopPanel = useCallback((
-    panel: "agents" | "branches" | "system" | "tools" | "session" | "language",
+    panel: "agents" | "consultations" | "branches" | "system" | "tools" | "session" | "language",
     keepMobileToolbarOpen = false,
   ) => {
     if (isMobile) setSidebarOpen(false);
@@ -440,11 +447,12 @@ export function AppShell() {
         setTopPanelPos({ top: topBarRect.bottom, left, width });
         return;
       }
-      if (activeTopPanel === "agents") {
+      if (activeTopPanel === "agents" || activeTopPanel === "consultations") {
+        const width = activeTopPanel === "consultations" ? CONSULTATION_PANEL_WIDTH : AGENT_PANEL_WIDTH;
         setTopPanelPos({
           top: topBarRect.bottom,
           left: topBarRect.left,
-          width: Math.min(AGENT_PANEL_WIDTH, topBarRect.width),
+          width: Math.min(width, topBarRect.width),
         });
         return;
       }
@@ -520,10 +528,11 @@ export function AppShell() {
   }, [isMobile]);
 
   const initialSessionId = initialNavigation.sessionId;
+  const initialSubsessionId = initialNavigation.subsessionId;
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
   const activeProjectKeyRef = useRef<string | null>(null);
   // True once the initial ?session= URL param has been resolved (or confirmed absent)
-  const [initialSessionRestored, setInitialSessionRestored] = useState<boolean>(() => !initialSessionId);
+  const [initialSessionRestored, setInitialSessionRestored] = useState<boolean>(() => !initialSessionId && !initialSubsessionId);
   // Suppresses sessionKey bump in handleCwdChange during the initial URL restore
   const suppressCwdBumpRef = useRef(false);
   // Guards the async workspace restore so a slow response from an earlier
@@ -755,7 +764,13 @@ export function AppShell() {
     // Skip router.replace when restoring from URL — the param is already correct
     // and calling replace in production Next.js triggers a Suspense remount loop
     if (!isRestore) {
-      router.replace(`?session=${encodeURIComponent(session.id)}`, { scroll: false });
+      const parentSessionId = session.relation?.kind === "consultation"
+        ? session.relation.parentSessionId
+        : null;
+      const query = parentSessionId
+        ? `?session=${encodeURIComponent(parentSessionId)}&subsession=${encodeURIComponent(session.id)}`
+        : `?session=${encodeURIComponent(session.id)}`;
+      router.replace(query, { scroll: false });
     }
   }, [activeCwd, activeFileTabId, invalidateWorkspaceRestore, router, isMobile, newSessionCwd, selectedSession]);
 
@@ -869,7 +884,7 @@ export function AppShell() {
     setExplorerRefreshKey((k) => k + 1);
     if (selectedSession) hydrateSelectedSession(selectedSession.id);
 
-    if (selectedSession?.relation?.kind === "subagent") return;
+    if (selectedSession?.relation?.kind === "subagent" || selectedSession?.relation?.kind === "consultation") return;
     if (!shouldShowBrowserNotification()) return;
     const targetSession = selectedSession;
     deliverSessionNotification({
@@ -881,7 +896,7 @@ export function AppShell() {
   }, [deliverSessionNotification, hydrateSelectedSession, selectedSession, translate]);
 
   const handleAttentionNeeded = useCallback((request: BlockingExtensionUiRequest) => {
-    if (selectedSession?.relation?.kind === "subagent") return;
+    if (selectedSession?.relation?.kind === "subagent" || selectedSession?.relation?.kind === "consultation") return;
     if (!shouldShowBrowserNotification()) return;
     if (!claimExtensionAttentionNotification(request, notifiedAttentionRequestIdsRef.current)) return;
 
@@ -951,18 +966,28 @@ export function AppShell() {
   }, [invalidateWorkspaceRestore, router, hydrateSelectedSession]);
 
   const handleAskInNewChat = useCallback(async (
-    prompt: string,
+    question: string,
     sourceSessionId: string,
-    sourceEntryId: string,
+    source: { kind: ConsultationSourceKind; entryId: string; blockIndex: number; text: string },
+    contextMode: ConsultationContextMode,
   ) => {
-    const result = await sendAgentCommand<{ newSessionId?: string }>(sourceSessionId, {
-      type: "fork_branch",
-      entryId: sourceEntryId,
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sourceSessionId)}/children`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contextMode, question, source }),
     });
-    if (!result?.newSessionId) throw new Error(translate("chat.quoteForkFailed"));
-    setPendingQuotePrompt({ sessionId: result.newSessionId, text: prompt });
-    handleSessionForked(result.newSessionId);
-  }, [handleSessionForked, translate]);
+    const result = await response.json().catch(() => null) as { sessionId?: string; error?: string } | null;
+    if (!response.ok || !result?.sessionId) {
+      throw new Error(result?.error ?? translate("chat.consultationFailed"));
+    }
+    setRefreshKey((key) => key + 1);
+    const detail = await fetch(`/api/sessions/${encodeURIComponent(result.sessionId)}`, { cache: "no-store" });
+    const detailData = await detail.json().catch(() => null) as { info?: SessionInfo; error?: string } | null;
+    // The POST already created the child. A transient detail-read failure must
+    // not make the user resubmit and create a duplicate consultation.
+    if (!detail.ok || !detailData?.info) return;
+    handleSelectSession(detailData.info);
+  }, [handleSelectSession, translate]);
 
   const handleInitialRestoreDone = useCallback(() => {
     setInitialSessionRestored(true);
@@ -971,7 +996,10 @@ export function AppShell() {
   const handleSessionDeleted = useCallback((sessionId: string) => {
     invalidateWorkspaceRestore();
     setRefreshKey((k) => k + 1);
-    if (selectedSession?.id === sessionId) {
+    const selectedFamily = selectedSession
+      ? getSessionFamily(sessionsWithSelection, selectedSession.id)
+      : null;
+    if (selectedSession && (selectedSession.id === sessionId || selectedFamily?.root.id === sessionId)) {
       const cwd = selectedSession.cwd;
       const draftId = typeof crypto.randomUUID === "function"
         ? crypto.randomUUID()
@@ -989,7 +1017,7 @@ export function AppShell() {
       setActiveTopPanel(null);
       router.replace(typeof window !== "undefined" ? window.location.pathname : "/", { scroll: false });
     }
-  }, [invalidateWorkspaceRestore, selectedSession, router]);
+  }, [invalidateWorkspaceRestore, selectedSession, sessionsWithSelection, router]);
 
   const handleOpenFile = useCallback((
     filePath: string,
@@ -1199,6 +1227,7 @@ export function AppShell() {
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
         initialSessionId={initialSessionId}
+        initialSubsessionId={initialSubsessionId}
         skipInitialProjectSelection={initialNavigation.requestedCwd !== null}
         onInitialRestoreDone={handleInitialRestoreDone}
         refreshKey={refreshKey}
@@ -1585,6 +1614,37 @@ export function AppShell() {
               }}
             >
               {activeSessionFamily!.subagents.length}
+            </span>
+          </button>
+        )}
+        {hasConsultationSessions && (
+          <button
+            type="button"
+            onClick={() => toggleTopPanel("consultations", mobile)}
+            title={translate("consultation.title")}
+            aria-label={translate("consultation.title")}
+            aria-pressed={activeTopPanel === "consultations"}
+            style={{
+              position: "relative",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              width: mobile ? TOP_BAR_ICON_BUTTON_SIZE : undefined,
+              height: "100%", padding: mobile ? 0 : "0 12px",
+              background: activeTopPanel === "consultations" ? "var(--bg-selected)" : "none",
+              border: "none",
+              borderTop: activeTopPanel === "consultations" ? "2px solid var(--accent)" : "2px solid transparent",
+              borderRight: "1px solid var(--border)",
+              color: activeTopPanel === "consultations" ? "var(--text)" : "var(--text-muted)",
+              cursor: "pointer", flexShrink: 0, fontSize: 11, whiteSpace: "nowrap",
+              transition: "color 0.1s, background 0.1s",
+            }}
+            data-mobile-toolbar-action={mobile ? "consultations" : undefined}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5 4h14v12H8l-3 3V4Z" /><path d="M8 8h8M8 12h5" />
+            </svg>
+            {!mobile && <span>{translate("consultation.title")}</span>}
+            <span aria-hidden="true" style={{ minWidth: 15, height: 15, padding: "0 4px", display: "grid", placeItems: "center", borderRadius: 7, background: "var(--bg-selected)", color: "var(--accent)", fontSize: 10, lineHeight: 1, fontVariantNumeric: "tabular-nums", ...(mobile ? { position: "absolute", top: 2, right: 2, minWidth: 13, height: 13, padding: "0 3px", fontSize: 9 } : {}) }}>
+              {activeSessionFamily!.consultations.length}
             </span>
           </button>
         )}
@@ -2228,6 +2288,15 @@ export function AppShell() {
                   onSelectSession={handleSelectSession}
                 />
               )}
+              {activeTopPanel === "consultations" && activeSessionFamily && selectedSession && (
+                <ConsultationSessionPanel
+                  rootSession={activeSessionFamily.root}
+                  consultations={activeSessionFamily.consultations}
+                  selectedSessionId={selectedSession.id}
+                  runningSessionIds={runningSessionIds}
+                  onSelectSession={handleSelectSession}
+                />
+              )}
               {activeTopPanel === "system" && (
                 <SystemPromptPanel
                   loading={systemInfoLoading}
@@ -2485,8 +2554,6 @@ export function AppShell() {
               onOpenSession={handleOpenSession}
               onAskInNewChat={handleAskInNewChat}
               quoteSelectionEnabled={quoteSelectionEnabled}
-              initialPrompt={pendingQuotePrompt?.sessionId === selectedSession?.id ? pendingQuotePrompt?.text : undefined}
-              onInitialPromptConsumed={() => setPendingQuotePrompt(null)}
               soundEnabled={soundEnabled}
               onSoundToggle={onSoundToggle}
               playDoneSound={playDoneSound}

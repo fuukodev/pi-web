@@ -204,6 +204,58 @@ test("deleting an intermediate subagent reparents both relation representations"
   });
 });
 
+test("deleting a session cascades consultation descendants without reparenting them", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-web-delete-consultation-"));
+  const parentPath = join(dir, "parent.jsonl");
+  const childPath = join(dir, "child.jsonl");
+  const grandchildPath = join(dir, "grandchild.jsonl");
+  const parentId = "consult-delete-parent";
+  const childId = "consult-delete-child";
+  const grandchildId = "consult-delete-grandchild";
+  const header = (id, parentSession) => JSON.stringify({
+    type: "session",
+    version: 3,
+    id,
+    timestamp: "2026-01-01T00:00:00.000Z",
+    cwd: dir,
+    ...(parentSession ? { parentSession } : {}),
+  });
+  const metadata = (id, parentSession, parentSessionId) => JSON.stringify({
+    type: "custom",
+    customType: "pi-web:consultation",
+    id: `${id}-meta`,
+    parentId: null,
+    timestamp: "2026-01-01T00:00:00.000Z",
+    data: {
+      version: 1,
+      parentSessionId,
+      parentSessionPath: parentSession,
+      contextMode: "selection",
+      source: { kind: "assistant_text", entryId: "a1", blockIndex: 0, excerpt: "answer" },
+      promptVersion: 1,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    },
+  });
+  await writeFile(parentPath, `${header(parentId)}\n`);
+  await writeFile(childPath, `${header(childId, parentPath)}\n${metadata(childId, parentPath, parentId)}\n`);
+  await writeFile(grandchildPath, `${header(grandchildId, childPath)}\n${metadata(grandchildId, childPath, childId)}\n`);
+  cacheSessionPath(parentId, parentPath);
+  t.after(async () => {
+    invalidateSessionPathCache(parentId);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const response = await deleteSession(
+    new Request(`http://localhost/api/sessions/${parentId}`, { method: "DELETE" }),
+    { params: Promise.resolve({ id: parentId }) },
+  );
+
+  assert.equal(response.status, 200);
+  for (const path of [parentPath, childPath, grandchildPath]) {
+    await assert.rejects(readFile(path), { code: "ENOENT" });
+  }
+});
+
 test("live detail and state routes work without a persisted JSONL file", async (t) => {
   const previousRegistry = globalThis.__piSessions;
   const id = "live-route-test";

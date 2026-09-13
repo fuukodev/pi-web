@@ -102,6 +102,7 @@ interface Props {
   onSelectSession: (session: SessionInfo, isRestore?: boolean, entryId?: string, blockIndex?: number) => void;
   onNewSession?: (sessionId: string, cwd: string) => void;
   initialSessionId?: string | null;
+  initialSubsessionId?: string | null;
   skipInitialProjectSelection?: boolean;
   onInitialRestoreDone?: () => void;
   refreshKey?: number;
@@ -369,7 +370,7 @@ function PiWebTitle() {
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, onOpenTerminal, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onRunningSessionIdsChange, onSessionsChange }: Props) {
+export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, initialSubsessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, onOpenTerminal, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onRunningSessionIdsChange, onSessionsChange }: Props) {
   const { t } = useI18n();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [sessionListVersion, setSessionListVersion] = useState<number | null>(null);
@@ -472,11 +473,12 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         );
         setRunningSessionIds(new Set(data.runningSessionIds ?? []));
       }
-      // Drop markers for deleted sessions and for subagents, whose completion
-      // is intentionally silent even if an older client marked them unread.
+      // Drop markers for deleted delegated/consultation sessions, whose
+      // completion is intentionally silent even if an older client marked them unread.
       const unreadEligibleIds = new Set(
         data.sessions
           .filter((session) => session.relation?.kind !== "subagent")
+          .filter((session) => session.relation?.kind !== "consultation")
           .map((session) => session.id),
       );
       setUnreadSessionIds((prev) => {
@@ -592,13 +594,13 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   useEffect(() => {
     const previous = previousRunningSessionIdsRef.current;
     const completedInBackground = [...previous].filter((id) => !runningSessionIds.has(id) && id !== selectedSessionId);
-    const knownSubagentIds = new Set(
+    const knownSilentChildIds = new Set(
       allSessions
-        .filter((session) => session.relation?.kind === "subagent")
+        .filter((session) => session.relation?.kind === "subagent" || session.relation?.kind === "consultation")
         .map((session) => session.id),
     );
     const completedWithNotifications = completedInBackground.filter(
-      (id) => !previousSuppressedCompletionSessionIdsRef.current.has(id) && !knownSubagentIds.has(id),
+      (id) => !previousSuppressedCompletionSessionIdsRef.current.has(id) && !knownSilentChildIds.has(id),
     );
     const newlyRunning = [...runningSessionIds].filter((id) => !previous.has(id));
 
@@ -623,7 +625,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     previousRunningSessionIdsRef.current = runningSessionIds;
     previousSuppressedCompletionSessionIdsRef.current = new Set(
       [...runningSessionIds].filter(
-        (id) => currentSuppressedCompletionSessionIdsRef.current.has(id) || knownSubagentIds.has(id),
+        (id) => currentSuppressedCompletionSessionIdsRef.current.has(id) || knownSilentChildIds.has(id),
       ),
     );
   }, [runningSessionIds, selectedSessionId, allSessions, loadSessions, onBackgroundTaskDone]);
@@ -751,9 +753,10 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
 
     if (selectedCwd === null) {
       // If restoring a session, set cwd to match that session
-      if (initialSessionId && !restoredRef.current) {
+      if ((initialSessionId || initialSubsessionId) && !restoredRef.current) {
         restoredRef.current = true;
-        const target = allSessions.find((s) => s.id === initialSessionId);
+        const target = allSessions.find((s) => s.id === initialSubsessionId)
+          ?? allSessions.find((s) => s.id === initialSessionId);
         if (target) {
           setSelectedCwd(target.cwd);
           onSelectSession(target, true);
@@ -765,7 +768,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       const projects = getRecentProjects(allSessions);
       if (projects.length > 0) setSelectedCwd(projects[0].root);
     }
-  }, [allSessions, selectedCwd, initialSessionId, skipInitialProjectSelection, onSelectSession, onInitialRestoreDone]);
+  }, [allSessions, selectedCwd, initialSessionId, initialSubsessionId, skipInitialProjectSelection, onSelectSession, onInitialRestoreDone]);
 
   // Prefer an exact UI selection while a refetch is in flight. Once the
   // response catches up, the server-resolved path handles Windows case and
@@ -1136,7 +1139,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                   color: "var(--text-dim)",
                 }}
               >
-                 {initialSessionId && !restoredRef.current ? "" : t("sidebar.selectProject")}
+                 {(initialSessionId || initialSubsessionId) && !restoredRef.current ? "" : t("sidebar.selectProject")}
               </span>
             )}
             {hasOtherWorkspaceActivity && (
@@ -1703,7 +1706,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
           >
             {virtualIndices.map((index) => {
               const family = sessionFamilies[index];
-              const familySessions = [family.root, ...family.subagents];
+              const familySessions = [family.root, ...family.children];
               const displaySession = family.latestModified === family.root.modified
                 ? family.root
                 : { ...family.root, modified: family.latestModified };
