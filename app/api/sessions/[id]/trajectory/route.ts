@@ -15,12 +15,13 @@ export const runtime = "nodejs";
 const DEFAULT_TRAJECTORY_PAGE_LIMIT = 20;
 const MAX_TRAJECTORY_ID_LENGTH = 256;
 
-function readOptionalId(value: string | null, name: "leafId" | "cursor"): string | undefined {
+function readOptionalId(value: string | null, name: "leafId" | "cursor" | "anchor"): string | undefined {
   if (value === null) return undefined;
   const normalized = value.trim();
   if (!normalized) return undefined;
   if (normalized.length > MAX_TRAJECTORY_ID_LENGTH || /[\u0000-\u001f\u007f]/u.test(normalized)) {
-    throw new TrajectoryQueryError(name === "leafId" ? "invalid_leaf" : "invalid_cursor", `${name} is invalid`);
+    const code = name === "leafId" ? "invalid_leaf" : name === "cursor" ? "invalid_cursor" : "invalid_anchor";
+    throw new TrajectoryQueryError(code, `${name} is invalid`);
   }
   return normalized;
 }
@@ -43,10 +44,12 @@ export async function GET(
 
   let leafId: string | undefined;
   let cursor: string | undefined;
+  let anchor: string | undefined;
   let limit: number;
   try {
     leafId = readOptionalId(url.searchParams.get("leafId"), "leafId");
     cursor = readOptionalId(url.searchParams.get("cursor"), "cursor");
+    anchor = readOptionalId(url.searchParams.get("anchor"), "anchor");
     limit = readLimit(url.searchParams.get("limit"));
   } catch (error) {
     const message = error instanceof TrajectoryQueryError ? error.message : "Invalid trajectory query";
@@ -65,6 +68,7 @@ export async function GET(
     const page = buildTrajectoryPage(sm.getEntries() as SessionEntry[], leafId ?? sm.getLeafId(), {
       limit,
       cursor,
+      anchorTurnId: anchor,
     });
     return NextResponse.json(page, {
       headers: { "Cache-Control": "no-store" },

@@ -11,7 +11,7 @@ import type {
 export const TRAJECTORY_PAGE_LIMIT_MIN = 1;
 export const TRAJECTORY_PAGE_LIMIT_MAX = 50;
 
-export type TrajectoryQueryErrorCode = "invalid_leaf" | "invalid_cursor" | "invalid_limit";
+export type TrajectoryQueryErrorCode = "invalid_leaf" | "invalid_cursor" | "invalid_anchor" | "invalid_limit";
 
 export class TrajectoryQueryError extends Error {
   readonly code: TrajectoryQueryErrorCode;
@@ -26,6 +26,8 @@ export class TrajectoryQueryError extends Error {
 export interface BuildTrajectoryPageOptions {
   limit: number;
   cursor?: string | null;
+  /** Turn start entry id to include as the newest turn of the page. */
+  anchorTurnId?: string | null;
 }
 
 function branchStats(turns: readonly TrajectoryTurn[], records: readonly TrajectoryRecord[]): TrajectoryBranchStats {
@@ -99,6 +101,10 @@ export function buildTrajectoryPage(
   const allTurns = projection.turns;
   const allRecords = projection.records;
   const cursor = options.cursor ?? null;
+  const anchorTurnId = options.anchorTurnId ?? null;
+  if (cursor !== null && anchorTurnId !== null) {
+    throw new TrajectoryQueryError("invalid_anchor", "cursor and anchor cannot be combined");
+  }
   let endExclusive = allTurns.length;
   if (cursor !== null) {
     const cursorIndex = allTurns.findIndex((turn) => turn.startEntryId === cursor);
@@ -106,6 +112,12 @@ export function buildTrajectoryPage(
       throw new TrajectoryQueryError("invalid_cursor", "cursor is not a turn boundary on this branch");
     }
     endExclusive = cursorIndex;
+  } else if (anchorTurnId !== null) {
+    const anchorIndex = allTurns.findIndex((turn) => turn.startEntryId === anchorTurnId);
+    if (anchorIndex < 0) {
+      throw new TrajectoryQueryError("invalid_anchor", "anchor is not a turn boundary on this branch");
+    }
+    endExclusive = anchorIndex + 1;
   }
 
   const start = Math.max(0, endExclusive - options.limit);
@@ -121,6 +133,7 @@ export function buildTrajectoryPage(
     records,
     nextCursor,
     hasEarlier,
+    hasLater: endExclusive < allTurns.length,
     branchStats: branchStats(allTurns, allRecords),
   };
 }

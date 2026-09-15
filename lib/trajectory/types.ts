@@ -80,5 +80,7 @@ export interface TrajectoryPage {
   records: TrajectoryRecord[];
   nextCursor: string | null;
   hasEarlier: boolean;
+  /** True when turns newer than this page exist on the branch. */
+  hasLater: boolean;
   branchStats: TrajectoryBranchStats;
 }
