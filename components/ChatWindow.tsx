@@ -38,8 +38,9 @@ export type ChatViewMode = "chat" | "trajectory";
 interface Props {
   session: SessionInfo | null;
   viewMode?: ChatViewMode;
-  searchTarget?: { sessionId: string; entryId: string; blockIndex?: number } | null;
+  searchTarget?: { sessionId: string; entryId: string; blockIndex?: number; toolCallId?: string } | null;
   onSearchTargetHandled?: (target: { sessionId: string; entryId: string }) => void;
+  onJumpToChat?: (target: { entryId: string; toolCallId?: string }) => void;
   initialScrollPosition?: ChatScrollPosition | null;
   onScrollPositionChange?: (sessionId: string, position: ChatScrollPosition) => void;
   sessionRunning?: boolean;
@@ -91,6 +92,8 @@ function phaseLabel(phase: AgentPhase, t: (key: string, params?: Record<string, 
 
 const CHAT_MINIMAP_WIDTH = 36;
 const CHAT_COLUMN_PADDING = 16;
+/** Bounded extra history pages fetched when a search/jump target is not loaded. */
+const MAX_JUMP_PAGES = 10;
 
 function NewSessionUpdateLink({
   label,
@@ -244,7 +247,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
   );
 }
 
-export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, onOpenSession, onAskInNewChat, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
+export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchTargetHandled, onJumpToChat, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, onOpenSession, onAskInNewChat, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const completionNotificationsEnabled = session?.relation?.kind !== "subagent";
@@ -477,6 +480,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
   const pendingScrollRestoreRef = useRef(pendingScrollRestore);
   pendingScrollRestoreRef.current = pendingScrollRestore;
   const [pendingSearchScroll, setPendingSearchScroll] = useState<Props["searchTarget"]>(null);
+  const [jumpFailed, setJumpFailed] = useState(false);
   const searchMessage = messages[entryIds.indexOf(pendingSearchScroll?.entryId ?? "")];
   const searchBlock = searchMessage?.role === "assistant"
     ? (pendingSearchScroll?.blockIndex === undefined
@@ -594,21 +598,37 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
     const locate = async () => {
       const history = searchHistoryRef.current;
       let found = history.entryIds.includes(searchTarget.entryId);
+      let attempts = 0;
       if (!found && !sessionBusy && history.hasEarlierMessages && history.historyCursor && !loadingOlderRef.current) {
         loadingOlderRef.current = true;
         const container = scrollContainerRef.current;
         if (container) prevScrollDistanceRef.current = captureScrollDistance(container.scrollHeight, container.scrollTop);
-        // ponytail: one extra page of 200 entries; deeper or other-branch hits just open the session.
-        const context = await loadContext(searchTarget.sessionId, activeLeafId, history.historyCursor, { tail: 200, signal: controller.signal });
-        loadingOlderRef.current = false;
-        found = Boolean(context?.entryIds.includes(searchTarget.entryId));
+        let cursor: string | null = history.historyCursor;
+        let hasEarlier: boolean = history.hasEarlierMessages;
+        try {
+          // Deep targets may sit behind several pages; each page's entry ids are
+          // checked directly so the loop does not depend on render timing.
+          while (!found && hasEarlier && cursor && attempts < MAX_JUMP_PAGES && !controller.signal.aborted) {
+            const context = await loadContext(searchTarget.sessionId, activeLeafId, cursor, { tail: 200, signal: controller.signal });
+            if (!context) break;
+            attempts += 1;
+            found = Boolean(context.entryIds.includes(searchTarget.entryId));
+            cursor = context.oldestEntryId;
+            hasEarlier = context.hasMore;
+          }
+        } finally {
+          loadingOlderRef.current = false;
+        }
       }
       if (controller.signal.aborted) return;
       if (found) {
         prevScrollDistanceRef.current = null;
-        setVisibleCount((current) => Math.max(current, (searchHistoryRef.current.entryIds.length + 200) * 2));
+        setJumpFailed(false);
+        setVisibleCount((current) => Math.max(current, (searchHistoryRef.current.entryIds.length + attempts * 200) * 2));
         setPendingSearchScroll(searchTarget);
       } else {
+        // A busy run skips loading; that is transient, not a missing record.
+        if (!sessionBusy) setJumpFailed(true);
         onSearchTargetHandled?.(searchTarget);
       }
     };
@@ -618,8 +638,16 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
 
   useLayoutEffect(() => {
     if (!pendingSearchScroll || pendingSearchScroll !== searchTarget) return;
-    const selector = `[data-entry-id="${CSS.escape(pendingSearchScroll.entryId)}"]`;
-    const element = scrollContainerRef.current?.querySelector<HTMLElement>(searchMessage?.role === "user" ? selector : `${selector} [data-search-target]`);
+    const container = scrollContainerRef.current;
+    const entrySelector = `[data-entry-id="${CSS.escape(pendingSearchScroll.entryId)}"]`;
+    const selectors = [
+      pendingSearchScroll.toolCallId ? `${entrySelector} [data-tool-call-id="${CSS.escape(pendingSearchScroll.toolCallId)}"]` : null,
+      searchMessage?.role === "user" ? entrySelector : `${entrySelector} [data-search-target]`,
+      entrySelector,
+    ].filter((selector): selector is string => Boolean(selector));
+    const element = selectors
+      .map((selector) => container?.querySelector<HTMLElement>(selector))
+      .find((candidate): candidate is HTMLElement => Boolean(candidate)) ?? null;
     if (element) {
       scrollToMessage(element);
       element.animate([
@@ -630,6 +658,12 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
     setPendingSearchScroll(null);
     onSearchTargetHandled?.(pendingSearchScroll);
   }, [pendingSearchScroll, searchTarget, searchMessage, scrollContainerRef, scrollToMessage, onSearchTargetHandled]);
+
+  useEffect(() => {
+    if (!jumpFailed) return;
+    const timer = setTimeout(() => setJumpFailed(false), 6000);
+    return () => clearTimeout(timer);
+  }, [jumpFailed]);
 
   // IntersectionObserver on the sentinel div at the top of the message list.
   // When it becomes visible, load the next page of older messages.
@@ -972,10 +1006,28 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
           display: "flex",
           // Toasts live in the top-right corner
           justifyContent: "flex-end",
+          gap: 8,
           padding: `0 ${CHAT_COLUMN_PADDING}px`,
           pointerEvents: "none",
         }}
       >
+        {jumpFailed && (
+          <div
+            role="status"
+            style={{ pointerEvents: "auto", display: "flex", alignItems: "center", gap: 8, maxWidth: 380, padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg-panel)", color: "var(--text-muted)", fontSize: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.18)" }}
+          >
+            <span>{t("trajectory.jumpNotFound")}</span>
+            <button
+              type="button"
+              onClick={() => setJumpFailed(false)}
+              aria-label={t("trajectory.dismissNotice")}
+              title={t("trajectory.dismissNotice")}
+              style={{ flexShrink: 0, padding: 0, border: "none", background: "transparent", color: "var(--text-dim)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}
+            >
+              ×
+            </button>
+          </div>
+        )}
         <NoticeShelf notices={notices} floating onPauseChange={setNoticePaused} />
       </div>
 
@@ -996,6 +1048,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
           isCompacting={isCompacting}
           agentPhase={agentPhase}
           streamState={streamState}
+          onJumpToChat={onJumpToChat}
         />
         {viewMode === "trajectory" ? null : <>
         {!isEmptyNew && <>

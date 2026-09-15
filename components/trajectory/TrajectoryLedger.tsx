@@ -12,6 +12,7 @@ interface Props {
   loadingEarlier: boolean;
   onLoadEarlier: () => void;
   onSelect: (record: TrajectoryRecord) => void;
+  onJump?: (record: TrajectoryRecord) => void;
 }
 
 function statusKey(status: TrajectoryRecord["status"]): string {
@@ -34,10 +35,11 @@ function statusColor(status: TrajectoryRecord["status"]): string {
   return "var(--text-muted)";
 }
 
-function RecordButton({ record, selectedId, onSelect, t }: {
+function RecordButton({ record, selectedId, onSelect, onJump, t }: {
   record: TrajectoryRecord;
   selectedId: string | null;
   onSelect: (record: TrajectoryRecord) => void;
+  onJump?: (record: TrajectoryRecord) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const selected = selectedId === record.id;
@@ -58,7 +60,15 @@ function RecordButton({ record, selectedId, onSelect, t }: {
       aria-pressed={selected}
       onClick={() => onSelect(record)}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          // Enter on the selected record jumps to its chat position; Enter on
+          // another record selects it without stealing the native behavior.
+          if (selected && onJump) onJump(record);
+          else onSelect(record);
+          return;
+        }
+        if (event.key === " ") {
           event.preventDefault();
           onSelect(record);
         }
@@ -103,7 +113,7 @@ function RecordButton({ record, selectedId, onSelect, t }: {
   );
 }
 
-export function TrajectoryLedger({ turns, liveRecords, selectedId, hasEarlier, loadingEarlier, onLoadEarlier, onSelect }: Props) {
+export function TrajectoryLedger({ turns, liveRecords, selectedId, hasEarlier, loadingEarlier, onLoadEarlier, onSelect, onJump }: Props) {
   const { t } = useI18n();
   return (
     <section data-trajectory-ledger="true" aria-labelledby="trajectory-ledger-heading" style={{ minWidth: 0, padding: "14px 16px 28px" }}>
@@ -134,7 +144,7 @@ export function TrajectoryLedger({ turns, liveRecords, selectedId, hasEarlier, l
               </h3>
               <div style={{ borderLeft: "1px solid var(--border)", paddingLeft: 7 }}>
                 {turn.records.map((record) => (
-                  <RecordButton key={record.id} record={record} selectedId={selectedId} onSelect={onSelect} t={t} />
+                  <RecordButton key={record.id} record={record} selectedId={selectedId} onSelect={onSelect} onJump={onJump} t={t} />
                 ))}
               </div>
             </article>
@@ -146,7 +156,7 @@ export function TrajectoryLedger({ turns, liveRecords, selectedId, hasEarlier, l
               </h3>
               <div style={{ borderLeft: "1px solid var(--accent)", paddingLeft: 7 }}>
                 {liveRecords.map((record) => (
-                  <RecordButton key={record.id} record={record} selectedId={selectedId} onSelect={onSelect} t={t} />
+                  <RecordButton key={record.id} record={record} selectedId={selectedId} onSelect={onSelect} onJump={onJump} t={t} />
                 ))}
               </div>
             </article>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionInfo } from "@/lib/types";
 import type { AgentPhase } from "@/hooks/useAgentSession";
 import type { StreamingState } from "@/lib/streaming-message";
@@ -26,14 +26,16 @@ export interface TrajectoryPaneProps {
   isCompacting: boolean;
   agentPhase: AgentPhase;
   streamState: StreamingState;
+  onJumpToChat?: (target: { entryId: string; toolCallId?: string }) => void;
 }
 
-function InspectorPanel({ session, activeLeafId, trajectory, record, onClose }: {
+function InspectorPanel({ session, activeLeafId, trajectory, record, onClose, onJumpToChat }: {
   session: SessionInfo;
   activeLeafId: string | null;
   trajectory: UseTrajectoryResult;
   record: TrajectoryRecord;
   onClose: () => void;
+  onJumpToChat: () => void;
 }) {
   return (
     <TrajectoryInspector
@@ -44,6 +46,7 @@ function InspectorPanel({ session, activeLeafId, trajectory, record, onClose }: 
       loading={trajectory.detailLoading}
       error={trajectory.detailError}
       onClose={onClose}
+      onJumpToChat={onJumpToChat}
     />
   );
 }
@@ -84,6 +87,37 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
     ], { duration: 2000 });
     setPendingScrollRecordId(null);
   }, [pendingScrollRecordId, trajectory.page]);
+
+  const onJumpToChat = props.onJumpToChat;
+  const jumpToChat = useCallback((record: TrajectoryRecord | null) => {
+    if (!record || !onJumpToChat || record.id.startsWith("live:")) return;
+    onJumpToChat({
+      entryId: record.entryId,
+      ...(record.toolCallId ? { toolCallId: record.toolCallId } : {}),
+    });
+  }, [onJumpToChat]);
+
+  // Enter jumps to the selected record's chat position when focus is not in a
+  // form control; the composer and search input keep their own Enter behavior.
+  useEffect(() => {
+    if (!props.enabled || !trajectory.selectedRecord) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || event.defaultPrevented || event.isComposing) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.closest("input, textarea, select, [contenteditable='true'], [role='combobox']")) return;
+      const recordButton = target?.closest<HTMLElement>("[data-trajectory-record]");
+      if (recordButton) {
+        if (recordButton.dataset.trajectoryRecord !== trajectory.selectedRecord?.id) return;
+      } else if (target?.closest("a, button")) {
+        return;
+      }
+      event.preventDefault();
+      jumpToChat(trajectory.selectedRecord);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [jumpToChat, props.enabled, trajectory.selectedRecord]);
 
   if (!props.enabled) return null;
 
@@ -191,14 +225,15 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
             loadingEarlier={trajectory.loadingEarlier}
             onLoadEarlier={() => void trajectory.loadEarlier()}
             onSelect={selectRecord}
+            onJump={jumpToChat}
           />
         </div>
-        {!isMobile && inspectorRecord && <InspectorPanel session={session} activeLeafId={props.activeLeafId} trajectory={trajectory} record={inspectorRecord} onClose={() => selectRecord(null)} />}
+        {!isMobile && inspectorRecord && <InspectorPanel session={session} activeLeafId={props.activeLeafId} trajectory={trajectory} record={inspectorRecord} onClose={() => selectRecord(null)} onJumpToChat={() => jumpToChat(inspectorRecord)} />}
       </div>
 
       {isMobile && inspectorRecord && (
         <div role="dialog" aria-modal="true" aria-labelledby="trajectory-inspector-heading" style={{ position: "absolute", inset: 0, zIndex: 5, overflow: "auto", background: "var(--bg-panel)", boxShadow: "-8px 0 24px rgba(0,0,0,0.18)" }}>
-          <InspectorPanel session={session} activeLeafId={props.activeLeafId} trajectory={trajectory} record={inspectorRecord} onClose={() => selectRecord(null)} />
+          <InspectorPanel session={session} activeLeafId={props.activeLeafId} trajectory={trajectory} record={inspectorRecord} onClose={() => selectRecord(null)} onJumpToChat={() => jumpToChat(inspectorRecord)} />
         </div>
       )}
     </section>

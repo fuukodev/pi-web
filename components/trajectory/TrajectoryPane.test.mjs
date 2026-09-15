@@ -99,6 +99,24 @@ test("offers a jump to latest when an anchored page hides newer turns", () => {
   assert.match(pane, /trajectory\.reload\(\)/);
 });
 
+test("inspector offers an icon jump-to-chat button left of close", () => {
+  const jumpIndex = inspector.indexOf('aria-label={t("trajectory.jumpToChat")}');
+  const closeIndex = inspector.indexOf('aria-label={t("trajectory.closeInspector")}');
+  assert.ok(jumpIndex > 0, "jump button missing");
+  assert.ok(closeIndex > 0, "close button missing");
+  assert.ok(jumpIndex < closeIndex, "jump button must precede close");
+  assert.match(inspector, /onJumpToChat/);
+  assert.match(pane, /jumpToChat/);
+  assert.match(pane, /onJumpToChat=\{\(\) => jumpToChat\(inspectorRecord\)\}/);
+});
+
+test("enter on the selected record jumps to chat while space keeps selecting", () => {
+  assert.match(ledger, /if \(selected && onJump\) onJump\(record\)/);
+  assert.match(ledger, /event\.key === " "/);
+  assert.match(pane, /addEventListener\("keydown"/);
+  assert.match(pane, /jumpToChat\(trajectory\.selectedRecord\)/);
+});
+
 test("inspector renders bounded JSON as text and links to Full History", () => {
   assert.match(inspector, /JSON\.stringify/);
   assert.match(inspector, /whiteSpace: "pre-wrap"/);
