@@ -35,6 +35,14 @@ test("overview keeps native button semantics inside list items", () => {
   assert.doesNotMatch(overview, /<button[^>]*role="listitem"/);
 });
 
+test("overview turn selection scrolls the matching ledger turn into view", () => {
+  assert.match(overview, /onSelectTurn/);
+  assert.match(overview, /onSelectTurn\(turn\)/);
+  assert.match(pane, /ledgerScrollRef/);
+  assert.match(pane, /data-trajectory-turn/);
+  assert.match(pane, /scrollTo\(/);
+});
+
 test("inspector renders bounded JSON as text and links to Full History", () => {
   assert.match(inspector, /JSON\.stringify/);
   assert.match(inspector, /whiteSpace: "pre-wrap"/);
