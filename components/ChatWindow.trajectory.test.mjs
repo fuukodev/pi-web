@@ -14,4 +14,6 @@ test("forwards trajectory jumps into the chat scroll pipeline", () => {
   assert.match(source, /\[data-tool-call-id=/);
   assert.match(source, /MAX_JUMP_PAGES/);
   assert.match(source, /trajectory\.jumpNotFound/);
+  assert.match(source, /trajectory\.jumpBusy/);
+  assert.match(source, /block\.toolCallId === pendingSearchScroll\.toolCallId/);
 });

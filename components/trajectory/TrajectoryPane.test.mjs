@@ -84,6 +84,7 @@ test("search UI exposes a type selector, combobox nav, and a close control", () 
   assert.match(search, /onSelectMatch/);
   assert.match(search, /trajectory\.searchClose/);
   assert.match(search, /trajectory\.searchFieldThinking/);
+  assert.match(search, /scrollIntoView\(\{ block: "nearest" \}\)/);
 });
 
 test("selecting a search result loads its turn, selects it, and scrolls the ledger", () => {
@@ -91,6 +92,16 @@ test("selecting a search result loads its turn, selects it, and scrolls the ledg
   assert.match(pane, /pendingScrollRecordId/);
   assert.match(pane, /data-trajectory-record/);
   assert.match(pane, /trajectory\.selectRecord\(match\.record\)/);
+  const closeIndex = pane.indexOf('setSearchOpen(false);\n    void trajectory.selectRecord(match.record)');
+  assert.ok(closeIndex > 0, "search must close before scrolling to a hit");
+});
+
+test("mobile inspector drawer takes focus, closes on escape, and restores focus", () => {
+  assert.match(pane, /mobileDialogRef/);
+  assert.match(pane, /mobileDialogRef\.current\?\.focus\(\)/);
+  assert.match(pane, /event\.key !== "Escape"/);
+  assert.match(pane, /tabIndex=\{-1\}/);
+  assert.match(pane, /\[data-trajectory-record="\$\{CSS\.escape\(recordId\)\}"\][\s\S]*?\.focus\(\)/);
 });
 
 test("offers a jump to latest when an anchored page hides newer turns", () => {

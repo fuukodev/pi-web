@@ -113,7 +113,9 @@ export function buildTrajectoryPage(
     }
     endExclusive = cursorIndex;
   } else if (anchorTurnId !== null) {
-    const anchorIndex = allTurns.findIndex((turn) => turn.startEntryId === anchorTurnId);
+    // Callers may pass either a stable turn id (`turn:<entryId>`) or the raw
+    // start entry id; both identify the same logical turn.
+    const anchorIndex = allTurns.findIndex((turn) => turn.id === anchorTurnId || turn.startEntryId === anchorTurnId);
     if (anchorIndex < 0) {
       throw new TrajectoryQueryError("invalid_anchor", "anchor is not a turn boundary on this branch");
     }

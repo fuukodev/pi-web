@@ -6,7 +6,7 @@ import {
   type TrajectorySearchField,
   type TrajectorySearchMatch,
   type TrajectorySearchType,
-} from "@/lib/trajectory/search";
+} from "@/lib/trajectory/search-query";
 import { TRAJECTORY_KIND_LABEL_KEYS } from "@/lib/trajectory/labels";
 import { useI18n } from "@/hooks/useI18n";
 
@@ -84,6 +84,11 @@ export function TrajectorySearch({
   useEffect(() => {
     setActiveIndex(0);
   }, [results]);
+
+  useEffect(() => {
+    if (!open) return;
+    document.getElementById(`trajectory-search-result-${activeIndex}`)?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, open]);
 
   useEffect(() => {
     if (!typeOpen) return;

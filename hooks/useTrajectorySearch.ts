@@ -7,7 +7,7 @@ import {
   type TrajectorySearchMatch,
   type TrajectorySearchResponse,
   type TrajectorySearchType,
-} from "@/lib/trajectory/search";
+} from "@/lib/trajectory/search-query";
 
 const SEARCH_DEBOUNCE_MS = 200;
 const SEARCH_LIMIT = 50;
@@ -93,10 +93,15 @@ export function useTrajectorySearch({
     }
 
     const controller = new AbortController();
+    // Drop the previous query's hits before the debounce so Enter can never
+    // activate a match that no longer corresponds to the typed term.
+    setResults([]);
+    setTotal(0);
+    setTruncated(false);
+    setLoading(true);
+    setError(null);
     const timer = setTimeout(() => {
       controllerRef.current = controller;
-      setLoading(true);
-      setError(null);
       const params = new URLSearchParams({ q: term, limit: String(SEARCH_LIMIT) });
       if (type !== "all") params.set("types", type);
       if (activeLeafId) params.set("leafId", activeLeafId);

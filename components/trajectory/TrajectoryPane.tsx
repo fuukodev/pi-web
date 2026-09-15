@@ -5,7 +5,7 @@ import type { SessionInfo } from "@/lib/types";
 import type { AgentPhase } from "@/hooks/useAgentSession";
 import type { StreamingState } from "@/lib/streaming-message";
 import type { TrajectoryRecord } from "@/lib/trajectory/types";
-import type { TrajectorySearchMatch } from "@/lib/trajectory/search";
+import type { TrajectorySearchMatch } from "@/lib/trajectory/search-query";
 import { isInspectableTrajectoryRecord } from "@/lib/trajectory/selection";
 import { useI18n } from "@/hooks/useI18n";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -89,6 +89,15 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
   }, [pendingScrollRecordId, trajectory.page]);
 
   const onJumpToChat = props.onJumpToChat;
+  const mobileInspectorOpen = props.enabled && isMobile && isInspectableTrajectoryRecord(trajectory.selectedRecord);
+  const mobileDialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mobileInspectorOpen) return;
+    // Move focus into the mobile drawer so its controls are reachable without
+    // tabbing through every ledger record behind the modal.
+    mobileDialogRef.current?.focus();
+  }, [mobileInspectorOpen, trajectory.selectedRecord?.id]);
   const jumpToChat = useCallback((record: TrajectoryRecord | null) => {
     if (!record || !onJumpToChat || record.id.startsWith("live:")) return;
     onJumpToChat({
@@ -147,6 +156,9 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
   const selectMatch = async (match: TrajectorySearchMatch) => {
     const loaded = await trajectory.ensureTurnLoaded(match.record.turnId);
     if (!loaded) return;
+    // Close the panel so it cannot cover the record that is about to scroll
+    // into view; closing also clears the query per the search contract.
+    setSearchOpen(false);
     void trajectory.selectRecord(match.record);
     setPendingScrollRecordId(match.record.id);
   };
@@ -232,7 +244,24 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
       </div>
 
       {isMobile && inspectorRecord && (
-        <div role="dialog" aria-modal="true" aria-labelledby="trajectory-inspector-heading" style={{ position: "absolute", inset: 0, zIndex: 5, overflow: "auto", background: "var(--bg-panel)", boxShadow: "-8px 0 24px rgba(0,0,0,0.18)" }}>
+        <div
+          ref={mobileDialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="trajectory-inspector-heading"
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const recordId = inspectorRecord.id;
+            selectRecord(null);
+            requestAnimationFrame(() => {
+              document.querySelector<HTMLElement>(`[data-trajectory-record="${CSS.escape(recordId)}"]`)?.focus();
+            });
+          }}
+          style={{ position: "absolute", inset: 0, zIndex: 5, overflow: "auto", background: "var(--bg-panel)", boxShadow: "-8px 0 24px rgba(0,0,0,0.18)", outline: "none" }}
+        >
           <InspectorPanel session={session} activeLeafId={props.activeLeafId} trajectory={trajectory} record={inspectorRecord} onClose={() => selectRecord(null)} onJumpToChat={() => jumpToChat(inspectorRecord)} />
         </div>
       )}

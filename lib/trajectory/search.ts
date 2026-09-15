@@ -1,18 +1,30 @@
 import { sliceActiveBranch } from "../session-reader";
 import type { SessionEntry } from "../types";
 import { projectTrajectory } from "./project";
+import {
+  TRAJECTORY_SEARCH_QUERY_MAX,
+  TRAJECTORY_SEARCH_TYPES,
+  type TrajectorySearchField,
+  type TrajectorySearchMatch,
+  type TrajectorySearchResponse,
+  type TrajectorySearchType,
+} from "./search-query";
 import type { TrajectoryRecord } from "./types";
 
-export type TrajectorySearchType = "user" | "assistant" | "thinking" | "tool";
-export type TrajectorySearchField = "text" | "thinking" | "toolName" | "toolInput";
+export {
+  TRAJECTORY_SEARCH_QUERY_MAX,
+  TRAJECTORY_SEARCH_TYPES,
+  parseTrajectorySearchQuery,
+  withTrajectorySearchType,
+} from "./search-query";
+export type {
+  ParsedTrajectorySearchQuery,
+  TrajectorySearchField,
+  TrajectorySearchMatch,
+  TrajectorySearchResponse,
+  TrajectorySearchType,
+} from "./search-query";
 
-export const TRAJECTORY_SEARCH_TYPES: readonly TrajectorySearchType[] = [
-  "user",
-  "assistant",
-  "thinking",
-  "tool",
-];
-export const TRAJECTORY_SEARCH_QUERY_MAX = 200;
 export const TRAJECTORY_SEARCH_LIMIT_MAX = 100;
 export const TRAJECTORY_SEARCH_RESULTS_DEFAULT = 50;
 
@@ -26,8 +38,6 @@ const ARG_MAX_STRING = 2048;
 const ARG_MAX_PART = 256;
 const ARG_MAX_TOTAL = 16 * 1024;
 
-const PREFIX_PATTERN = /^(user|assistant|thinking|think|th|tool|u|a|t)\s*:\s*/i;
-
 export type TrajectorySearchErrorCode = "invalid_query";
 
 export class TrajectorySearchError extends Error {
@@ -38,27 +48,6 @@ export class TrajectorySearchError extends Error {
     this.name = "TrajectorySearchError";
     this.code = code;
   }
-}
-
-export interface ParsedTrajectorySearchQuery {
-  type: TrajectorySearchType | "all";
-  term: string;
-}
-
-export interface TrajectorySearchMatch {
-  record: TrajectoryRecord;
-  turnOrdinal: number;
-  snippet: string;
-  field: TrajectorySearchField;
-}
-
-export interface TrajectorySearchResponse {
-  version: 1;
-  query: string;
-  types: TrajectorySearchType[];
-  matches: TrajectorySearchMatch[];
-  total: number;
-  truncated: boolean;
 }
 
 export interface BuildTrajectorySearchOptions {
@@ -82,41 +71,6 @@ function collapse(value: string): string {
 
 function invalid(message: string): TrajectorySearchError {
   return new TrajectorySearchError("invalid_query", message);
-}
-
-function normalizeType(token: string): TrajectorySearchType {
-  switch (token.toLowerCase()) {
-    case "u":
-    case "user":
-      return "user";
-    case "a":
-    case "assistant":
-      return "assistant";
-    case "th":
-    case "think":
-    case "thinking":
-      return "thinking";
-    default:
-      return "tool";
-  }
-}
-
-/**
- * Splits an optional leading type prefix (`user:`, `th:`, `tool:` …) from the
- * search term so the UI select and the typed text stay in agreement.
- */
-export function parseTrajectorySearchQuery(raw: string): ParsedTrajectorySearchQuery {
-  const trimmed = raw.trim();
-  const match = PREFIX_PATTERN.exec(trimmed);
-  if (!match) return { type: "all", term: trimmed };
-  return { type: normalizeType(match[1]), term: trimmed.slice(match[0].length).trim() };
-}
-
-/** Rewrites the typed query so the select stays in sync with the text prefix. */
-export function withTrajectorySearchType(raw: string, type: TrajectorySearchType | "all"): string {
-  const { term } = parseTrajectorySearchQuery(raw);
-  if (type === "all") return term;
-  return `${type}: ${term}`.trim();
 }
 
 function normalizeTypes(types: readonly TrajectorySearchType[] | undefined): TrajectorySearchType[] {
@@ -280,6 +234,12 @@ export function buildTrajectorySearch(
   outer: for (let turnIndex = projection.turns.length - 1; turnIndex >= 0; turnIndex -= 1) {
     const turn = projection.turns[turnIndex];
     for (let recordIndex = turn.records.length - 1; recordIndex >= 0; recordIndex -= 1) {
+      // Enforce the wall-clock budget on every record: a query with no matches
+      // would otherwise scan the whole branch unchecked.
+      if (Date.now() > deadline) {
+        budgetExceeded = true;
+        break outer;
+      }
       const record = turn.records[recordIndex];
       if (!allowed.has(record.kind)) continue;
 
@@ -303,7 +263,7 @@ export function buildTrajectorySearch(
           field: hit.candidate.field,
         });
       }
-      if (total >= MAX_MATCHES || Date.now() > deadline) {
+      if (total >= MAX_MATCHES) {
         budgetExceeded = true;
         break outer;
       }

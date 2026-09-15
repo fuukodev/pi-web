@@ -480,7 +480,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
   const pendingScrollRestoreRef = useRef(pendingScrollRestore);
   pendingScrollRestoreRef.current = pendingScrollRestore;
   const [pendingSearchScroll, setPendingSearchScroll] = useState<Props["searchTarget"]>(null);
-  const [jumpFailed, setJumpFailed] = useState(false);
+  const [jumpNotice, setJumpNotice] = useState<"notFound" | "busy" | null>(null);
   const searchMessage = messages[entryIds.indexOf(pendingSearchScroll?.entryId ?? "")];
   const searchBlock = searchMessage?.role === "assistant"
     ? (pendingSearchScroll?.blockIndex === undefined
@@ -623,12 +623,13 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
       if (controller.signal.aborted) return;
       if (found) {
         prevScrollDistanceRef.current = null;
-        setJumpFailed(false);
+        setJumpNotice(null);
         setVisibleCount((current) => Math.max(current, (searchHistoryRef.current.entryIds.length + attempts * 200) * 2));
         setPendingSearchScroll(searchTarget);
       } else {
-        // A busy run skips loading; that is transient, not a missing record.
-        if (!sessionBusy) setJumpFailed(true);
+        // A busy run skips page loading entirely, so say that instead of
+        // claiming the record is missing.
+        setJumpNotice(sessionBusy ? "busy" : "notFound");
         onSearchTargetHandled?.(searchTarget);
       }
     };
@@ -660,10 +661,10 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
   }, [pendingSearchScroll, searchTarget, searchMessage, scrollContainerRef, scrollToMessage, onSearchTargetHandled]);
 
   useEffect(() => {
-    if (!jumpFailed) return;
-    const timer = setTimeout(() => setJumpFailed(false), 6000);
+    if (!jumpNotice) return;
+    const timer = setTimeout(() => setJumpNotice(null), 6000);
     return () => clearTimeout(timer);
-  }, [jumpFailed]);
+  }, [jumpNotice]);
 
   // IntersectionObserver on the sentinel div at the top of the message list.
   // When it becomes visible, load the next page of older messages.
@@ -1011,15 +1012,15 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
           pointerEvents: "none",
         }}
       >
-        {jumpFailed && (
+        {jumpNotice && (
           <div
             role="status"
             style={{ pointerEvents: "auto", display: "flex", alignItems: "center", gap: 8, maxWidth: 380, padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg-panel)", color: "var(--text-muted)", fontSize: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.18)" }}
           >
-            <span>{t("trajectory.jumpNotFound")}</span>
+            <span>{jumpNotice === "busy" ? t("trajectory.jumpBusy") : t("trajectory.jumpNotFound")}</span>
             <button
               type="button"
-              onClick={() => setJumpFailed(false)}
+              onClick={() => setJumpNotice(null)}
               aria-label={t("trajectory.dismissNotice")}
               title={t("trajectory.dismissNotice")}
               style={{ flexShrink: 0, padding: 0, border: "none", background: "transparent", color: "var(--text-dim)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}
@@ -1200,7 +1201,9 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
                   if (blocks.length === 0) continue;
                   processRefIdx ??= visibleRefIndexByMessage.get(processIdx);
                   processToolCount += countToolCallBlocks(blocks);
-                  revealProcess ||= Boolean(pendingSearchScroll && entryIds[processIdx] === pendingSearchScroll.entryId && (!searchBlock || blocks.includes(searchBlock)));
+                  revealProcess ||= Boolean(pendingSearchScroll && entryIds[processIdx] === pendingSearchScroll.entryId && (pendingSearchScroll.toolCallId
+                    ? blocks.some((block) => block.type === "toolCall" && block.toolCallId === pendingSearchScroll.toolCallId)
+                    : (!searchBlock || blocks.includes(searchBlock))));
                   processViews.push(renderMessage(processIdx, {
                     attachRef: false,
                     keyPrefix: "process",

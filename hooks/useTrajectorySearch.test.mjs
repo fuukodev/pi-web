@@ -25,3 +25,9 @@ test("clears results and text when the search closes", () => {
   assert.match(source, /setQuery\(""\)/);
   assert.match(source, /setResults\(\[\]\)/);
 });
+
+test("drops the previous query hits before starting the next debounce", () => {
+  const clearIndex = source.indexOf("setResults([])");
+  const timerIndex = source.indexOf("const timer = setTimeout");
+  assert.ok(clearIndex >= 0 && timerIndex > clearIndex);
+});

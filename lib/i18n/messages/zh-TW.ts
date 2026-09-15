@@ -181,6 +181,7 @@ export const zhTWLocale: LocalePlugin = {
     "trajectory.latest": "跳到最新",
     "trajectory.jumpToChat": "在聊天中開啟",
     "trajectory.jumpNotFound": "無法在聊天記錄中定位該項目",
+    "trajectory.jumpBusy": "工作階段正在執行，請在結束後重試跳轉",
     "trajectory.dismissNotice": "略過",
     "title.generating": "正在產生...",
     "title.updated": "標題已更新",
