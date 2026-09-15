@@ -481,6 +481,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
   pendingScrollRestoreRef.current = pendingScrollRestore;
   const [pendingSearchScroll, setPendingSearchScroll] = useState<Props["searchTarget"]>(null);
   const [jumpNotice, setJumpNotice] = useState<"notFound" | null>(null);
+  const [locatingJump, setLocatingJump] = useState(false);
   const searchMessage = messages[entryIds.indexOf(pendingSearchScroll?.entryId ?? "")];
   const searchBlock = searchMessage?.role === "assistant"
     ? (pendingSearchScroll?.blockIndex === undefined
@@ -599,7 +600,13 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
       const history = searchHistoryRef.current;
       let found = history.entryIds.includes(searchTarget.entryId);
       let attempts = 0;
+      let newerCount = history.entryIds.length;
+      let neededVisibleCount: number | null = null;
+      setLocatingJump(false);
       if (!found && history.hasEarlierMessages && history.historyCursor && !loadingOlderRef.current) {
+        // Hide the transcript while pages load so the jump lands on the final
+        // position instead of playing back every scroll-anchoring adjustment.
+        setLocatingJump(true);
         loadingOlderRef.current = true;
         const container = scrollContainerRef.current;
         if (container) prevScrollDistanceRef.current = captureScrollDistance(container.scrollHeight, container.scrollTop);
@@ -612,7 +619,15 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
             const context = await loadContext(searchTarget.sessionId, activeLeafId, cursor, { tail: 200, signal: controller.signal });
             if (!context) break;
             attempts += 1;
-            found = Boolean(context.entryIds.includes(searchTarget.entryId));
+            const indexInPage = context.entryIds.indexOf(searchTarget.entryId);
+            if (indexInPage >= 0) {
+              found = true;
+              // Render only from the target to the tail; the previous heuristic
+              // doubled the loaded window and made deep jumps expensive.
+              neededVisibleCount = newerCount + (context.entryIds.length - indexInPage) + 32;
+            } else {
+              newerCount += context.entryIds.length;
+            }
             cursor = context.oldestEntryId;
             hasEarlier = context.hasMore;
           }
@@ -624,9 +639,10 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
       if (found) {
         prevScrollDistanceRef.current = null;
         setJumpNotice(null);
-        setVisibleCount((current) => Math.max(current, (searchHistoryRef.current.entryIds.length + attempts * 200) * 2));
+        setVisibleCount((current) => neededVisibleCount === null ? current : Math.max(current, neededVisibleCount));
         setPendingSearchScroll(searchTarget);
       } else {
+        setLocatingJump(false);
         setJumpNotice("notFound");
         onSearchTargetHandled?.(searchTarget);
       }
@@ -656,6 +672,8 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
     }
     setPendingSearchScroll(null);
     onSearchTargetHandled?.(pendingSearchScroll);
+    // Reveal the transcript only after the instant scroll has been applied.
+    setLocatingJump(false);
   }, [pendingSearchScroll, searchTarget, searchMessage, scrollContainerRef, scrollToMessage, onSearchTargetHandled]);
 
   useEffect(() => {
@@ -663,6 +681,12 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
     const timer = setTimeout(() => setJumpNotice(null), 6000);
     return () => clearTimeout(timer);
   }, [jumpNotice]);
+
+  useEffect(() => {
+    // A cleared target (session switch, handled event) must never leave the
+    // transcript hidden behind a stale locating state.
+    if (!searchTarget) setLocatingJump(false);
+  }, [searchTarget]);
 
   // IntersectionObserver on the sentinel div at the top of the message list.
   // When it becomes visible, load the next page of older messages.
@@ -1050,11 +1074,19 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
           onJumpToChat={onJumpToChat}
         />
         {viewMode === "trajectory" ? null : <>
+        {locatingJump && (
+          <div
+            role="status"
+            style={{ position: "absolute", inset: 0, zIndex: 30, display: "grid", placeItems: "center", background: "var(--bg)", color: "var(--text-muted)", fontSize: 12, pointerEvents: "none" }}
+          >
+            {t("chat.locatingMessage")}
+          </div>
+        )}
         {!isEmptyNew && <>
         <div
           ref={scrollContainerRef}
           className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-4 [scrollbar-width:none]"
-          style={{ visibility: pendingScrollRestore ? "hidden" : undefined }}
+          style={{ visibility: pendingScrollRestore || locatingJump ? "hidden" : undefined }}
         >
           <div style={{ minWidth: 0, padding: `0 ${CHAT_COLUMN_PADDING}px` }}>
             <div ref={messageContentRef} onPointerUp={captureQuotedSelection} style={{ width: "100%", minWidth: 0, maxWidth: "var(--chat-content-max-width, 820px)", margin: "0 auto" }}>

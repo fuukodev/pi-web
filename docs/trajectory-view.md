@@ -95,17 +95,20 @@ ledger block; the v1 live overlay does not fabricate a persisted user entry.
 The header offers a search button immediately before retry. Expanding it shows
 a type selector (All/User/Assistant/Thinking/Tool), a combobox input with
 arrow-key result navigation, and a results list; typing `user:`, `a:`, `th:`,
-`tool:` and similar prefixes switches the type filter. Closing the search
-clears text and results. Selecting a result selects the record and scrolls the
+`tool:` and similar prefixes switches the type filter (the prefix list lives in
+the type selector's tooltip rather than the header). Closing the search clears
+text and results. Selecting a result selects the record and scrolls the
 ledger, fetching an anchored page when the turn is not loaded; a `Jump to
 latest` control restores the tail window in that case.
 
 Every record is keyboard focusable/selectable. Enter on an already-selected
 record jumps to its chat position, as does the inspector's icon button to the
 left of close; the jump switches back to chat, loads bounded older pages until
-the entry is present (up to 10 pages of 200 entries), scrolls to the exact tool
-call block when one is known, and shows a dismissible notice when the position
-cannot be located. Space keeps its select/deselect behavior. All icon-only
+the entry is present (up to 10 pages of 200 entries), scrolls instantly to the
+exact tool call block when one is known, and shows a dismissible notice when
+the position cannot be located. While those pages load the transcript stays
+hidden behind a locating status, so the final position appears directly
+instead of replaying intermediate scroll adjustments. Space keeps its select/deselect behavior. All icon-only
 controls have translated labels, and loading, error, empty, and no-details
 states are explicit. Role colors use separate theme tokens for user, assistant,
 thinking, tool, bash, and metadata records; status text/markers remain

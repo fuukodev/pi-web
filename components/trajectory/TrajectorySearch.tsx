@@ -138,7 +138,7 @@ export function TrajectorySearch({
     : error
       ? error
       : !open
-        ? t("trajectory.searchHint")
+        ? ""
         : total === 0
           ? t("trajectory.searchNoResults")
           : t("trajectory.searchResults", { count: total });
@@ -153,7 +153,7 @@ export function TrajectorySearch({
             aria-haspopup="listbox"
             aria-expanded={typeOpen}
             aria-label={t("trajectory.searchTypeLabel")}
-            title={t("trajectory.searchTypeLabel")}
+            title={t("trajectory.searchHint")}
             onClick={() => setTypeOpen((value) => !value)}
             style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 28, padding: "0 8px", border: "1px solid var(--border)", borderRadius: 4, background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }}
           >
@@ -221,7 +221,6 @@ export function TrajectorySearch({
         >
           {statusText}
         </span>
-
         <button
           type="button"
           onClick={onClose}

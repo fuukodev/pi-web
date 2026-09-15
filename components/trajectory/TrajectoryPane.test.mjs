@@ -85,6 +85,13 @@ test("search UI exposes a type selector, combobox nav, and a close control", () 
   assert.match(search, /trajectory\.searchClose/);
   assert.match(search, /trajectory\.searchFieldThinking/);
   assert.match(search, /scrollIntoView\(\{ block: "nearest" \}\)/);
+  // The prefix hint is a tooltip only; an empty search shows no status text.
+  assert.doesNotMatch(search, /\? t\("trajectory\.searchHint"\)/);
+  assert.match(search, /title=\{t\("trajectory\.searchHint"\)\}/);
+});
+
+test("the header search icon button centers its glyph", () => {
+  assert.match(pane, /placeItems: "center", width: 30, height: 30, padding: 0/);
 });
 
 test("selecting a search result loads its turn, selects it, and scrolls the ledger", () => {
