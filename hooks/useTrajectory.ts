@@ -12,6 +12,7 @@ import type {
   TrajectoryPage,
   TrajectoryRecord,
 } from "@/lib/trajectory/types";
+import { isInspectableTrajectoryRecord } from "@/lib/trajectory/selection";
 import type { TrajectoryRecordDetail } from "@/lib/trajectory/detail";
 import type { AgentPhase } from "./useAgentSession";
 
@@ -169,7 +170,7 @@ export function useTrajectory({
     setSelectedRecord(record);
     setDetail(null);
     setDetailError(null);
-    if (!record || record.id.startsWith("live:") || !enabled || !sessionId) return;
+    if (!record || !isInspectableTrajectoryRecord(record) || !enabled || !sessionId) return;
 
     const controller = new AbortController();
     detailControllerRef.current = controller;
