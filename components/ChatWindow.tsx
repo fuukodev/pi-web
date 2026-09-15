@@ -600,8 +600,6 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
       const history = searchHistoryRef.current;
       let found = history.entryIds.includes(searchTarget.entryId);
       let attempts = 0;
-      let newerCount = history.entryIds.length;
-      let neededVisibleCount: number | null = null;
       setLocatingJump(false);
       if (!found && history.hasEarlierMessages && history.historyCursor && !loadingOlderRef.current) {
         // Hide the transcript while pages load so the jump lands on the final
@@ -619,15 +617,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
             const context = await loadContext(searchTarget.sessionId, activeLeafId, cursor, { tail: 200, signal: controller.signal });
             if (!context) break;
             attempts += 1;
-            const indexInPage = context.entryIds.indexOf(searchTarget.entryId);
-            if (indexInPage >= 0) {
-              found = true;
-              // Render only from the target to the tail; the previous heuristic
-              // doubled the loaded window and made deep jumps expensive.
-              neededVisibleCount = newerCount + (context.entryIds.length - indexInPage) + 32;
-            } else {
-              newerCount += context.entryIds.length;
-            }
+            found = Boolean(context.entryIds.includes(searchTarget.entryId));
             cursor = context.oldestEntryId;
             hasEarlier = context.hasMore;
           }
@@ -639,7 +629,6 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
       if (found) {
         prevScrollDistanceRef.current = null;
         setJumpNotice(null);
-        setVisibleCount((current) => neededVisibleCount === null ? current : Math.max(current, neededVisibleCount));
         setPendingSearchScroll(searchTarget);
       } else {
         setLocatingJump(false);
@@ -649,7 +638,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
     };
     void locate();
     return () => controller.abort();
-  }, [searchTarget, loading, activeLeafId, sessionBusy, loadContext, onSearchTargetHandled, scrollContainerRef]);
+  }, [searchTarget, loading, activeLeafId, loadContext, onSearchTargetHandled, scrollContainerRef]);
 
   useLayoutEffect(() => {
     if (!pendingSearchScroll || pendingSearchScroll !== searchTarget) return;
@@ -669,6 +658,10 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
         { backgroundColor: "var(--bg-selected)" },
         { backgroundColor: "transparent" },
       ], { duration: 2500 });
+    } else {
+      // Records without a chat anchor (metadata entries, or a window that could
+      // not render the target) must not fail silently.
+      setJumpNotice("notFound");
     }
     setPendingSearchScroll(null);
     onSearchTargetHandled?.(pendingSearchScroll);
@@ -1324,7 +1317,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
             </div>
           </div>
         </div>
-        {isMobile || pendingScrollRestore ? null : (
+        {isMobile || pendingScrollRestore || locatingJump ? null : (
           <ChatMinimap
             messages={messages}
             streamingMessage={streamState.streamingMessage}

@@ -11,12 +11,18 @@ export function PwaRegistration() {
     if (process.env.NODE_ENV !== "production") {
       // A service worker left over from a production run caches `/_next/static/*`
       // cache-first. Dev chunk URLs are stable across recompiles, so that stale
-      // cache would keep serving old code after HMR. Dev must not keep it.
-      void navigator.serviceWorker.getRegistrations().then((registrations) => {
-        for (const registration of registrations) {
-          void registration.unregister();
-        }
-      });
+      // cache would keep serving old code after HMR. Dev must not keep it, and
+      // its cache entries have to go with it.
+      void navigator.serviceWorker.getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+        .then(() => (typeof caches === "undefined"
+          ? undefined
+          : caches.keys().then((keys) => Promise.all(
+            keys.filter((key) => key.startsWith("pi-web-")).map((key) => caches.delete(key)),
+          ))))
+        .catch(() => {
+          // Storage can be blocked; the app still works without the cleanup.
+        });
       return;
     }
 

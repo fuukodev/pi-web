@@ -88,6 +88,8 @@ test("search UI exposes a type selector, combobox nav, and a close control", () 
   // The prefix hint is a tooltip only; an empty search shows no status text.
   assert.doesNotMatch(search, /\? t\("trajectory\.searchHint"\)/);
   assert.match(search, /title=\{t\("trajectory\.searchHint"\)\}/);
+  assert.match(search, /id="trajectory-search-hint"/);
+  assert.match(search, /aria-describedby="trajectory-search-hint"/);
 });
 
 test("the header search icon button centers its glyph", () => {
@@ -140,6 +142,7 @@ test("failed records are marked red across the ledger, search, and inspector", (
   assert.match(ledger, /record\.status === "error" \? "var\(--trajectory-error-bg\)" : "transparent"/);
   assert.match(ledger, /record\.status === "error" && record\.error/);
   assert.match(overview, /if \(status === "error"\) return "var\(--trajectory-error\)"/);
+  assert.match(overview, /status === "error" && <span aria-hidden="true" style=\{\{ fontWeight: 700 \}\}>!<\/span>/);
   assert.match(inspector, /data-trajectory-status=\{record\.status\}/);
   assert.match(inspector, /role="alert"[\s\S]*?record\.error/);
   assert.match(search, /data-trajectory-status=\{match\.record\.status\}/);

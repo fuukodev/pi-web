@@ -21,11 +21,11 @@ test("forwards trajectory jumps into the chat scroll pipeline", () => {
 test("deep jumps reveal the transcript only at the final position", () => {
   assert.match(source, /const \[locatingJump, setLocatingJump\] = useState\(false\)/);
   assert.match(source, /setLocatingJump\(true\)/);
-  assert.match(source, /neededVisibleCount = newerCount \+ \(context\.entryIds\.length - indexInPage\) \+ 32/);
-  assert.doesNotMatch(source, /entryIds\.length \+ attempts \* 200\) \* 2/);
   assert.match(source, /visibility: pendingScrollRestore \|\| locatingJump \? "hidden" : undefined/);
   assert.match(source, /t\("chat\.locatingMessage"\)/);
   const scrollIndex = source.indexOf("scrollToMessage(element)", source.indexOf("const selectors = ["));
   const revealIndex = source.indexOf("setLocatingJump(false)", scrollIndex);
   assert.ok(scrollIndex > 0 && revealIndex > scrollIndex, "reveal must follow the instant scroll");
+  assert.match(source, /else \{\s*\/\/ Records without a chat anchor[\s\S]*?setJumpNotice\("notFound"\)/);
+  assert.match(source, /isMobile \|\| pendingScrollRestore \|\| locatingJump \? null : \(/);
 });

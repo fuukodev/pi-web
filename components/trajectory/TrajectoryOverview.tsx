@@ -78,6 +78,7 @@ export function TrajectoryOverview({ turns, liveRecords, selectedId, onSelectTur
               >
                 <span aria-hidden="true" style={{ width: 5, height: 12, borderRadius: 2, background: statusColor(status) }} />
                 <span>{index + 1}</span>
+                {status === "error" && <span aria-hidden="true" style={{ fontWeight: 700 }}>!</span>}
               </button>
             </div>
           );

@@ -8,6 +8,9 @@ test("dev unregisters leftover production service workers", () => {
   assert.match(source, /process\.env\.NODE_ENV !== "production"/);
   assert.match(source, /navigator\.serviceWorker\.getRegistrations\(\)/);
   assert.match(source, /registration\.unregister\(\)/);
+  assert.match(source, /caches\.keys\(\)/);
+  assert.match(source, /key\.startsWith\("pi-web-"\)/);
+  assert.match(source, /\.catch\(\(\) => \{/);
   const devGuardIndex = source.indexOf('process.env.NODE_ENV !== "production"');
   const registerIndex = source.indexOf("navigator.serviceWorker.register");
   assert.ok(devGuardIndex > 0 && registerIndex > devGuardIndex, "dev path must run before and instead of registration");

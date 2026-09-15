@@ -145,6 +145,12 @@ export function TrajectorySearch({
 
   return (
     <>
+      <span
+        id="trajectory-search-hint"
+        style={{ position: "absolute", width: 1, height: 1, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" }}
+      >
+        {t("trajectory.searchHint")}
+      </span>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
         <div ref={typeRef} style={{ position: "relative", flexShrink: 0 }}>
           <button
@@ -206,6 +212,7 @@ export function TrajectorySearch({
           role="combobox"
           aria-expanded={open}
           aria-controls="trajectory-search-results"
+          aria-describedby="trajectory-search-hint"
           aria-activedescendant={open && results[activeIndex] ? `trajectory-search-result-${activeIndex}` : undefined}
           aria-label={t("trajectory.searchPlaceholder")}
           placeholder={t("trajectory.searchPlaceholder")}
