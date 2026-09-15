@@ -480,7 +480,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
   const pendingScrollRestoreRef = useRef(pendingScrollRestore);
   pendingScrollRestoreRef.current = pendingScrollRestore;
   const [pendingSearchScroll, setPendingSearchScroll] = useState<Props["searchTarget"]>(null);
-  const [jumpNotice, setJumpNotice] = useState<"notFound" | "busy" | null>(null);
+  const [jumpNotice, setJumpNotice] = useState<"notFound" | null>(null);
   const searchMessage = messages[entryIds.indexOf(pendingSearchScroll?.entryId ?? "")];
   const searchBlock = searchMessage?.role === "assistant"
     ? (pendingSearchScroll?.blockIndex === undefined
@@ -599,7 +599,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
       const history = searchHistoryRef.current;
       let found = history.entryIds.includes(searchTarget.entryId);
       let attempts = 0;
-      if (!found && !sessionBusy && history.hasEarlierMessages && history.historyCursor && !loadingOlderRef.current) {
+      if (!found && history.hasEarlierMessages && history.historyCursor && !loadingOlderRef.current) {
         loadingOlderRef.current = true;
         const container = scrollContainerRef.current;
         if (container) prevScrollDistanceRef.current = captureScrollDistance(container.scrollHeight, container.scrollTop);
@@ -627,9 +627,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
         setVisibleCount((current) => Math.max(current, (searchHistoryRef.current.entryIds.length + attempts * 200) * 2));
         setPendingSearchScroll(searchTarget);
       } else {
-        // A busy run skips page loading entirely, so say that instead of
-        // claiming the record is missing.
-        setJumpNotice(sessionBusy ? "busy" : "notFound");
+        setJumpNotice("notFound");
         onSearchTargetHandled?.(searchTarget);
       }
     };
@@ -1017,7 +1015,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
             role="status"
             style={{ pointerEvents: "auto", display: "flex", alignItems: "center", gap: 8, maxWidth: 380, padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg-panel)", color: "var(--text-muted)", fontSize: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.18)" }}
           >
-            <span>{jumpNotice === "busy" ? t("trajectory.jumpBusy") : t("trajectory.jumpNotFound")}</span>
+            <span>{t("trajectory.jumpNotFound")}</span>
             <button
               type="button"
               onClick={() => setJumpNotice(null)}

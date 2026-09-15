@@ -181,7 +181,6 @@ export const zhCNLocale: LocalePlugin = {
     "trajectory.latest": "跳到最新",
     "trajectory.jumpToChat": "在聊天中打开",
     "trajectory.jumpNotFound": "无法在聊天记录中定位该条目",
-    "trajectory.jumpBusy": "会话正在运行，请在结束后重试跳转",
     "trajectory.dismissNotice": "忽略",
     "title.generating": "正在生成…",
     "title.updated": "标题已更新",

@@ -181,7 +181,6 @@ export const enLocale: LocalePlugin = {
     "trajectory.latest": "Jump to latest",
     "trajectory.jumpToChat": "Open in chat",
     "trajectory.jumpNotFound": "Could not locate that record in the chat history",
-    "trajectory.jumpBusy": "The session is running; try the jump again after it settles",
     "trajectory.dismissNotice": "Dismiss",
     "title.generating": "Generating...",
     "title.updated": "Title updated",
