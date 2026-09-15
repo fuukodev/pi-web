@@ -58,3 +58,24 @@ export interface TrajectoryProjection {
   turns: TrajectoryTurn[];
   records: TrajectoryRecord[];
 }
+
+export interface TrajectoryBranchStats {
+  turns: number;
+  records: number;
+  userMessages: number;
+  assistantSteps: number;
+  toolCalls: number;
+  toolResults: number;
+  errors: number;
+  estimatedDurationMs: number;
+}
+
+export interface TrajectoryPage {
+  version: 1;
+  leafId: string | null;
+  turns: TrajectoryTurn[];
+  records: TrajectoryRecord[];
+  nextCursor: string | null;
+  hasEarlier: boolean;
+  branchStats: TrajectoryBranchStats;
+}
