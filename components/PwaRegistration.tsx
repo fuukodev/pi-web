@@ -4,7 +4,19 @@ import { useEffect } from "react";
 
 export function PwaRegistration() {
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) {
+    if (!("serviceWorker" in navigator)) {
+      return;
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+      // A service worker left over from a production run caches `/_next/static/*`
+      // cache-first. Dev chunk URLs are stable across recompiles, so that stale
+      // cache would keep serving old code after HMR. Dev must not keep it.
+      void navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) {
+          void registration.unregister();
+        }
+      });
       return;
     }
 
