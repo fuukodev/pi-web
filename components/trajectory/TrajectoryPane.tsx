@@ -1,17 +1,20 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SessionInfo } from "@/lib/types";
 import type { AgentPhase } from "@/hooks/useAgentSession";
 import type { StreamingState } from "@/lib/streaming-message";
 import type { TrajectoryRecord } from "@/lib/trajectory/types";
+import type { TrajectorySearchMatch } from "@/lib/trajectory/search";
 import { isInspectableTrajectoryRecord } from "@/lib/trajectory/selection";
 import { useI18n } from "@/hooks/useI18n";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useTrajectory, type UseTrajectoryResult } from "@/hooks/useTrajectory";
+import { useTrajectorySearch } from "@/hooks/useTrajectorySearch";
 import { TrajectoryInspector } from "./TrajectoryInspector";
 import { TrajectoryLedger } from "./TrajectoryLedger";
 import { TrajectoryOverview } from "./TrajectoryOverview";
+import { TrajectorySearch } from "./TrajectorySearch";
 
 export interface TrajectoryPaneProps {
   session: SessionInfo | null;
@@ -50,6 +53,38 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
   const isMobile = useIsMobile();
   const trajectory = useTrajectory(props);
   const ledgerScrollRef = useRef<HTMLDivElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [pendingScrollRecordId, setPendingScrollRecordId] = useState<string | null>(null);
+  const search = useTrajectorySearch({
+    sessionId: props.session?.id ?? null,
+    activeLeafId: props.activeLeafId,
+    enabled: props.enabled,
+    open: searchOpen,
+  });
+
+  useEffect(() => {
+    if (!props.enabled) setSearchOpen(false);
+  }, [props.enabled]);
+
+  // The anchored page renders after `ensureTurnLoaded` resolves; waiting on the
+  // page state keeps the scroll target stable after the new turns commit.
+  useEffect(() => {
+    if (!pendingScrollRecordId) return;
+    const container = ledgerScrollRef.current;
+    if (!container) return;
+    const target = container.querySelector<HTMLElement>(
+      `[data-trajectory-record="${CSS.escape(pendingScrollRecordId)}"]`,
+    );
+    if (!target) return;
+    const targetTop = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+    container.scrollTo({ top: Math.max(0, targetTop - 24), behavior: "smooth" });
+    target.animate([
+      { backgroundColor: "var(--bg-selected)" },
+      { backgroundColor: "transparent" },
+    ], { duration: 2000 });
+    setPendingScrollRecordId(null);
+  }, [pendingScrollRecordId, trajectory.page]);
+
   if (!props.enabled) return null;
 
   const { page, liveRecords, selectedRecord } = trajectory;
@@ -75,6 +110,12 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
     const nextRecord = record && selectedRecord?.id === record.id ? null : record;
     void trajectory.selectRecord(nextRecord);
   };
+  const selectMatch = async (match: TrajectorySearchMatch) => {
+    const loaded = await trajectory.ensureTurnLoaded(match.record.turnId);
+    if (!loaded) return;
+    void trajectory.selectRecord(match.record);
+    setPendingScrollRecordId(match.record.id);
+  };
   const scrollToTurn = (turnId: string) => {
     requestAnimationFrame(() => {
       const container = ledgerScrollRef.current;
@@ -95,12 +136,38 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
       aria-busy={trajectory.loading}
       style={{ position: "relative", display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0, height: "100%", background: "var(--bg)" }}
     >
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 44, padding: "0 16px", borderBottom: "1px solid var(--border)", background: "var(--bg-panel)" }}>
-        <div style={{ minWidth: 0 }}>
-          <h1 id="trajectory-title" style={{ margin: 0, overflow: "hidden", color: "var(--text)", fontSize: 14, fontWeight: 650, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t("trajectory.title")}</h1>
-          {stats && <div style={{ marginTop: 2, color: "var(--text-dim)", fontSize: 11 }}>{t("trajectory.recordCount", { count: stats.records })}</div>}
-        </div>
-        <button type="button" onClick={() => void trajectory.reload()} disabled={trajectory.loading} title={t("trajectory.retry")} aria-label={t("trajectory.retry")} style={{ flexShrink: 0, width: 30, height: 30, border: "1px solid var(--border)", borderRadius: 4, background: "transparent", color: "var(--text-muted)", cursor: trajectory.loading ? "wait" : "pointer", fontSize: 15 }}>↻</button>
+      <header style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 44, padding: "0 16px", borderBottom: "1px solid var(--border)", background: "var(--bg-panel)" }}>
+        {searchOpen ? (
+          <TrajectorySearch
+            query={search.query}
+            onQueryChange={search.setQuery}
+            type={search.type}
+            onTypeChange={search.setType}
+            results={search.results}
+            total={search.total}
+            truncated={search.truncated}
+            loading={search.loading}
+            error={search.error}
+            onSelectMatch={(match) => void selectMatch(match)}
+            onClose={() => setSearchOpen(false)}
+          />
+        ) : (
+          <>
+            <div style={{ minWidth: 0 }}>
+              <h1 id="trajectory-title" style={{ margin: 0, overflow: "hidden", color: "var(--text)", fontSize: 14, fontWeight: 650, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t("trajectory.title")}</h1>
+              {stats && <div style={{ marginTop: 2, color: "var(--text-dim)", fontSize: 11 }}>{t("trajectory.recordCount", { count: stats.records })}</div>}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+              {page?.hasLater && (
+                <button type="button" onClick={() => void trajectory.reload()} title={t("trajectory.latest")} aria-label={t("trajectory.latest")} style={{ height: 30, padding: "0 8px", border: "1px solid var(--border)", borderRadius: 4, background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: 11 }}>{t("trajectory.latest")}</button>
+              )}
+              <button type="button" onClick={() => setSearchOpen(true)} title={t("trajectory.search")} aria-label={t("trajectory.search")} style={{ flexShrink: 0, width: 30, height: 30, border: "1px solid var(--border)", borderRadius: 4, background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: 14 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+              </button>
+              <button type="button" onClick={() => void trajectory.reload()} disabled={trajectory.loading} title={t("trajectory.retry")} aria-label={t("trajectory.retry")} style={{ flexShrink: 0, width: 30, height: 30, border: "1px solid var(--border)", borderRadius: 4, background: "transparent", color: "var(--text-muted)", cursor: trajectory.loading ? "wait" : "pointer", fontSize: 15 }}>↻</button>
+            </div>
+          </>
+        )}
       </header>
 
       {trajectory.error && (

@@ -112,6 +112,13 @@ export function parseTrajectorySearchQuery(raw: string): ParsedTrajectorySearchQ
   return { type: normalizeType(match[1]), term: trimmed.slice(match[0].length).trim() };
 }
 
+/** Rewrites the typed query so the select stays in sync with the text prefix. */
+export function withTrajectorySearchType(raw: string, type: TrajectorySearchType | "all"): string {
+  const { term } = parseTrajectorySearchQuery(raw);
+  if (type === "all") return term;
+  return `${type}: ${term}`.trim();
+}
+
 function normalizeTypes(types: readonly TrajectorySearchType[] | undefined): TrajectorySearchType[] {
   if (types === undefined) return [...TRAJECTORY_SEARCH_TYPES];
   if (!Array.isArray(types) || types.length === 0) throw invalid("types must not be empty");

@@ -6,6 +6,7 @@ const pane = await readFile(new URL("./TrajectoryPane.tsx", import.meta.url), "u
 const ledger = await readFile(new URL("./TrajectoryLedger.tsx", import.meta.url), "utf8");
 const inspector = await readFile(new URL("./TrajectoryInspector.tsx", import.meta.url), "utf8");
 const overview = await readFile(new URL("./TrajectoryOverview.tsx", import.meta.url), "utf8");
+const search = await readFile(new URL("./TrajectorySearch.tsx", import.meta.url), "utf8");
 const globals = await readFile(new URL("../../app/globals.css", import.meta.url), "utf8");
 
 test("trajectory pane separates data loading from the ledger and exposes accessible regions", () => {
@@ -59,9 +60,43 @@ test("trajectory records expose role colors separately from status colors", () =
   assert.match(ledger, /data-trajectory-kind=\{record\.kind\}/);
   assert.match(ledger, /var\(--trajectory-kind-color/);
   assert.match(inspector, /data-trajectory-kind=\{record\.kind\}/);
-  for (const token of ["--trajectory-user", "--trajectory-assistant", "--trajectory-tool", "--trajectory-bash", "--trajectory-meta"]) {
+  for (const token of ["--trajectory-user", "--trajectory-assistant", "--trajectory-thinking", "--trajectory-tool", "--trajectory-bash", "--trajectory-meta"]) {
     assert.match(globals, new RegExp(token));
   }
+});
+
+test("search button sits left of retry and opens an inline search bar", () => {
+  const searchIndex = pane.indexOf('aria-label={t("trajectory.search")}');
+  const retryIndex = pane.indexOf('aria-label={t("trajectory.retry")}');
+  assert.ok(searchIndex > 0, "search button missing");
+  assert.ok(retryIndex > 0, "retry button missing");
+  assert.ok(searchIndex < retryIndex, "search button must precede retry");
+  assert.match(pane, /useTrajectorySearch/);
+  assert.match(pane, /<TrajectorySearch/);
+});
+
+test("search UI exposes a type selector, combobox nav, and a close control", () => {
+  assert.match(search, /aria-haspopup="listbox"/);
+  assert.match(search, /role="combobox"/);
+  assert.match(search, /role="option"/);
+  assert.match(search, /ArrowDown/);
+  assert.match(search, /ArrowUp/);
+  assert.match(search, /onSelectMatch/);
+  assert.match(search, /trajectory\.searchClose/);
+  assert.match(search, /trajectory\.searchFieldThinking/);
+});
+
+test("selecting a search result loads its turn, selects it, and scrolls the ledger", () => {
+  assert.match(pane, /ensureTurnLoaded/);
+  assert.match(pane, /pendingScrollRecordId/);
+  assert.match(pane, /data-trajectory-record/);
+  assert.match(pane, /trajectory\.selectRecord\(match\.record\)/);
+});
+
+test("offers a jump to latest when an anchored page hides newer turns", () => {
+  assert.match(pane, /page\?\.hasLater/);
+  assert.match(pane, /trajectory\.latest/);
+  assert.match(pane, /trajectory\.reload\(\)/);
 });
 
 test("inspector renders bounded JSON as text and links to Full History", () => {

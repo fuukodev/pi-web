@@ -1,6 +1,7 @@
 "use client";
 
 import type { TrajectoryRecord, TrajectoryTurn } from "@/lib/trajectory/types";
+import { TRAJECTORY_KIND_LABEL_KEYS } from "@/lib/trajectory/labels";
 import { useI18n } from "@/hooks/useI18n";
 
 interface Props {
@@ -12,19 +13,6 @@ interface Props {
   onLoadEarlier: () => void;
   onSelect: (record: TrajectoryRecord) => void;
 }
-
-const kindKeys: Record<TrajectoryRecord["kind"], string> = {
-  user: "trajectory.user",
-  assistant: "trajectory.assistant",
-  thinking: "trajectory.thinking",
-  tool: "trajectory.tool",
-  bash: "trajectory.bash",
-  compaction: "trajectory.compaction",
-  modelChange: "trajectory.modelChange",
-  thinkingChange: "trajectory.thinkingChange",
-  branchSummary: "trajectory.branchSummary",
-  custom: "trajectory.custom",
-};
 
 function statusKey(status: TrajectoryRecord["status"]): string {
   if (status === "error") return "trajectory.errorStatus";
@@ -55,7 +43,7 @@ function RecordButton({ record, selectedId, onSelect, t }: {
   const selected = selectedId === record.id;
   const duration = formatDuration(record.durationMs);
   const label = [
-    t(kindKeys[record.kind]),
+    t(TRAJECTORY_KIND_LABEL_KEYS[record.kind]),
     record.summary,
     t(statusKey(record.status)),
     duration,
@@ -95,7 +83,7 @@ function RecordButton({ record, selectedId, onSelect, t }: {
       <span style={{ minWidth: 0 }}>
         <span style={{ display: "flex", alignItems: "baseline", gap: 7, minWidth: 0 }}>
           <span style={{ color: "var(--trajectory-kind-color, var(--text-muted))", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", flexShrink: 0 }}>
-            {t(kindKeys[record.kind])}
+            {t(TRAJECTORY_KIND_LABEL_KEYS[record.kind])}
           </span>
           <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, fontWeight: 600 }}>
             {record.summary}
