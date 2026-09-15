@@ -29,6 +29,13 @@ test("initializes session timing before recording active work", () => {
   assert.ok(resetIndex < recordIndex);
 });
 
+test("anchors the loaded window on a turn that is not loaded yet", () => {
+  assert.match(source, /ensureTurnLoaded/);
+  assert.match(source, /params\.set\("anchor"/);
+  assert.match(source, /pageRef\.current\?\.turns\.some/);
+  assert.match(source, /return next\.turns\.some/);
+});
+
 test("refreshes persisted trajectory after a busy run settles", () => {
   assert.match(source, /wasBusyRef/);
   assert.match(source, /if \(wasBusyRef\.current && !busy && enabled/);

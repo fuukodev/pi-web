@@ -25,6 +25,12 @@ test("trajectory route validates bounded pagination and maps query failures to 4
   assert.equal(query.TRAJECTORY_PAGE_LIMIT_MAX, 50);
 });
 
+test("trajectory route supports inclusive anchors for search jumps", () => {
+  assert.match(routeSource, /readOptionalId\(url\.searchParams\.get\("anchor"\), "anchor"\)/);
+  assert.match(routeSource, /anchorTurnId: anchor/);
+  assert.match(routeSource, /invalid_anchor/);
+});
+
 test("trajectory route does not expose unexpected internal errors", () => {
   assert.match(routeSource, /Unable to load trajectory/);
   assert.doesNotMatch(routeSource, /NextResponse\.json\(\{ error: String\(error\) \}/);

@@ -39,6 +39,7 @@ export interface UseTrajectoryResult {
   error: string | null;
   loadEarlier: () => Promise<void>;
   reload: () => Promise<void>;
+  ensureTurnLoaded: (turnId: string) => Promise<boolean>;
   liveRecords: TrajectoryRecord[];
   selectedRecord: TrajectoryRecord | null;
   detail: TrajectoryRecordDetail | null;
@@ -85,7 +86,7 @@ export function useTrajectory({
 
   pageRef.current = page;
 
-  const fetchPage = useCallback(async (cursor?: string | null): Promise<TrajectoryPage | null> => {
+  const fetchPage = useCallback(async (cursor?: string | null, anchor?: string | null): Promise<TrajectoryPage | null> => {
     if (!enabled || !sessionId) return null;
     requestControllerRef.current?.abort();
     const controller = new AbortController();
@@ -93,6 +94,7 @@ export function useTrajectory({
     const params = new URLSearchParams({ limit: String(DEFAULT_PAGE_LIMIT) });
     if (activeLeafId) params.set("leafId", activeLeafId);
     if (cursor) params.set("cursor", cursor);
+    if (anchor) params.set("anchor", anchor);
 
     try {
       const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/trajectory?${params}`, {
@@ -165,6 +167,27 @@ export function useTrajectory({
     }
   }, [enabled, fetchPage, sessionId]);
 
+  const ensureTurnLoaded = useCallback(async (turnId: string): Promise<boolean> => {
+    if (!enabled || !sessionId) return false;
+    if (pageRef.current?.turns.some((turn) => turn.id === turnId)) return true;
+    try {
+      // The anchored page replaces the window so a search hit far back needs
+      // exactly one request; `hasLater` lets the pane offer "jump to latest".
+      const next = await fetchPage(null, turnId);
+      if (!next) return false;
+      setPage(next);
+      setSelectedRecord(null);
+      setDetail(null);
+      setDetailError(null);
+      return next.turns.some((turn) => turn.id === turnId);
+    } catch (cause) {
+      if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      }
+      return false;
+    }
+  }, [enabled, fetchPage, sessionId]);
+
   const selectRecord = useCallback(async (record: TrajectoryRecord | null) => {
     detailControllerRef.current?.abort();
     setSelectedRecord(record);
@@ -178,6 +201,8 @@ export function useTrajectory({
     const params = new URLSearchParams();
     if (activeLeafId) params.set("leafId", activeLeafId);
     if (record.toolCallId) params.set("toolCallId", record.toolCallId);
+    // Stable record ids keep thinking rows distinct from their assistant entry.
+    params.set("recordId", record.id);
     const query = params.toString();
     try {
       const response = await fetch(
@@ -256,6 +281,7 @@ export function useTrajectory({
     error,
     loadEarlier,
     reload,
+    ensureTurnLoaded,
     liveRecords,
     selectedRecord,
     detail,

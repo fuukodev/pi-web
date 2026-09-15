@@ -38,8 +38,9 @@ export type ChatViewMode = "chat" | "trajectory";
 interface Props {
   session: SessionInfo | null;
   viewMode?: ChatViewMode;
-  searchTarget?: { sessionId: string; entryId: string; blockIndex?: number } | null;
+  searchTarget?: { sessionId: string; entryId: string; blockIndex?: number; toolCallId?: string } | null;
   onSearchTargetHandled?: (target: { sessionId: string; entryId: string }) => void;
+  onJumpToChat?: (target: { entryId: string; toolCallId?: string }) => void;
   initialScrollPosition?: ChatScrollPosition | null;
   onScrollPositionChange?: (sessionId: string, position: ChatScrollPosition) => void;
   sessionRunning?: boolean;
@@ -91,6 +92,8 @@ function phaseLabel(phase: AgentPhase, t: (key: string, params?: Record<string, 
 
 const CHAT_MINIMAP_WIDTH = 36;
 const CHAT_COLUMN_PADDING = 16;
+/** Bounded extra history pages fetched when a search/jump target is not loaded. */
+const MAX_JUMP_PAGES = 10;
 
 function NewSessionUpdateLink({
   label,
@@ -244,7 +247,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
   );
 }
 
-export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, onOpenSession, onAskInNewChat, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
+export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchTargetHandled, onJumpToChat, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, onOpenSession, onAskInNewChat, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const completionNotificationsEnabled = session?.relation?.kind !== "subagent";
@@ -477,6 +480,8 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
   const pendingScrollRestoreRef = useRef(pendingScrollRestore);
   pendingScrollRestoreRef.current = pendingScrollRestore;
   const [pendingSearchScroll, setPendingSearchScroll] = useState<Props["searchTarget"]>(null);
+  const [jumpNotice, setJumpNotice] = useState<"notFound" | null>(null);
+  const [locatingJump, setLocatingJump] = useState(false);
   const searchMessage = messages[entryIds.indexOf(pendingSearchScroll?.entryId ?? "")];
   const searchBlock = searchMessage?.role === "assistant"
     ? (pendingSearchScroll?.blockIndex === undefined
@@ -594,42 +599,87 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
     const locate = async () => {
       const history = searchHistoryRef.current;
       let found = history.entryIds.includes(searchTarget.entryId);
-      if (!found && !sessionBusy && history.hasEarlierMessages && history.historyCursor && !loadingOlderRef.current) {
+      let attempts = 0;
+      setLocatingJump(false);
+      if (!found && history.hasEarlierMessages && history.historyCursor && !loadingOlderRef.current) {
+        // Hide the transcript while pages load so the jump lands on the final
+        // position instead of playing back every scroll-anchoring adjustment.
+        setLocatingJump(true);
         loadingOlderRef.current = true;
         const container = scrollContainerRef.current;
         if (container) prevScrollDistanceRef.current = captureScrollDistance(container.scrollHeight, container.scrollTop);
-        // ponytail: one extra page of 200 entries; deeper or other-branch hits just open the session.
-        const context = await loadContext(searchTarget.sessionId, activeLeafId, history.historyCursor, { tail: 200, signal: controller.signal });
-        loadingOlderRef.current = false;
-        found = Boolean(context?.entryIds.includes(searchTarget.entryId));
+        let cursor: string | null = history.historyCursor;
+        let hasEarlier: boolean = history.hasEarlierMessages;
+        try {
+          // Deep targets may sit behind several pages; each page's entry ids are
+          // checked directly so the loop does not depend on render timing.
+          while (!found && hasEarlier && cursor && attempts < MAX_JUMP_PAGES && !controller.signal.aborted) {
+            const context = await loadContext(searchTarget.sessionId, activeLeafId, cursor, { tail: 200, signal: controller.signal });
+            if (!context) break;
+            attempts += 1;
+            found = Boolean(context.entryIds.includes(searchTarget.entryId));
+            cursor = context.oldestEntryId;
+            hasEarlier = context.hasMore;
+          }
+        } finally {
+          loadingOlderRef.current = false;
+        }
       }
       if (controller.signal.aborted) return;
       if (found) {
         prevScrollDistanceRef.current = null;
-        setVisibleCount((current) => Math.max(current, (searchHistoryRef.current.entryIds.length + 200) * 2));
+        setJumpNotice(null);
         setPendingSearchScroll(searchTarget);
       } else {
+        setLocatingJump(false);
+        setJumpNotice("notFound");
         onSearchTargetHandled?.(searchTarget);
       }
     };
     void locate();
     return () => controller.abort();
-  }, [searchTarget, loading, activeLeafId, sessionBusy, loadContext, onSearchTargetHandled, scrollContainerRef]);
+  }, [searchTarget, loading, activeLeafId, loadContext, onSearchTargetHandled, scrollContainerRef]);
 
   useLayoutEffect(() => {
     if (!pendingSearchScroll || pendingSearchScroll !== searchTarget) return;
-    const selector = `[data-entry-id="${CSS.escape(pendingSearchScroll.entryId)}"]`;
-    const element = scrollContainerRef.current?.querySelector<HTMLElement>(searchMessage?.role === "user" ? selector : `${selector} [data-search-target]`);
+    const container = scrollContainerRef.current;
+    const entrySelector = `[data-entry-id="${CSS.escape(pendingSearchScroll.entryId)}"]`;
+    const selectors = [
+      pendingSearchScroll.toolCallId ? `${entrySelector} [data-tool-call-id="${CSS.escape(pendingSearchScroll.toolCallId)}"]` : null,
+      searchMessage?.role === "user" ? entrySelector : `${entrySelector} [data-search-target]`,
+      entrySelector,
+    ].filter((selector): selector is string => Boolean(selector));
+    const element = selectors
+      .map((selector) => container?.querySelector<HTMLElement>(selector))
+      .find((candidate): candidate is HTMLElement => Boolean(candidate)) ?? null;
     if (element) {
       scrollToMessage(element);
       element.animate([
         { backgroundColor: "var(--bg-selected)" },
         { backgroundColor: "transparent" },
       ], { duration: 2500 });
+    } else {
+      // Records without a chat anchor (metadata entries, or a window that could
+      // not render the target) must not fail silently.
+      setJumpNotice("notFound");
     }
     setPendingSearchScroll(null);
     onSearchTargetHandled?.(pendingSearchScroll);
+    // Reveal the transcript only after the instant scroll has been applied.
+    setLocatingJump(false);
   }, [pendingSearchScroll, searchTarget, searchMessage, scrollContainerRef, scrollToMessage, onSearchTargetHandled]);
+
+  useEffect(() => {
+    if (!jumpNotice) return;
+    const timer = setTimeout(() => setJumpNotice(null), 6000);
+    return () => clearTimeout(timer);
+  }, [jumpNotice]);
+
+  useEffect(() => {
+    // A cleared target (session switch, handled event) must never leave the
+    // transcript hidden behind a stale locating state.
+    if (!searchTarget) setLocatingJump(false);
+  }, [searchTarget]);
 
   // IntersectionObserver on the sentinel div at the top of the message list.
   // When it becomes visible, load the next page of older messages.
@@ -972,10 +1022,28 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
           display: "flex",
           // Toasts live in the top-right corner
           justifyContent: "flex-end",
+          gap: 8,
           padding: `0 ${CHAT_COLUMN_PADDING}px`,
           pointerEvents: "none",
         }}
       >
+        {jumpNotice && (
+          <div
+            role="status"
+            style={{ pointerEvents: "auto", display: "flex", alignItems: "center", gap: 8, maxWidth: 380, padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg-panel)", color: "var(--text-muted)", fontSize: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.18)" }}
+          >
+            <span>{t("trajectory.jumpNotFound")}</span>
+            <button
+              type="button"
+              onClick={() => setJumpNotice(null)}
+              aria-label={t("trajectory.dismissNotice")}
+              title={t("trajectory.dismissNotice")}
+              style={{ flexShrink: 0, padding: 0, border: "none", background: "transparent", color: "var(--text-dim)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}
+            >
+              ×
+            </button>
+          </div>
+        )}
         <NoticeShelf notices={notices} floating onPauseChange={setNoticePaused} />
       </div>
 
@@ -996,13 +1064,22 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
           isCompacting={isCompacting}
           agentPhase={agentPhase}
           streamState={streamState}
+          onJumpToChat={onJumpToChat}
         />
         {viewMode === "trajectory" ? null : <>
+        {locatingJump && (
+          <div
+            role="status"
+            style={{ position: "absolute", inset: 0, zIndex: 30, display: "grid", placeItems: "center", background: "var(--bg)", color: "var(--text-muted)", fontSize: 12, pointerEvents: "none" }}
+          >
+            {t("chat.locatingMessage")}
+          </div>
+        )}
         {!isEmptyNew && <>
         <div
           ref={scrollContainerRef}
           className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-4 [scrollbar-width:none]"
-          style={{ visibility: pendingScrollRestore ? "hidden" : undefined }}
+          style={{ visibility: pendingScrollRestore || locatingJump ? "hidden" : undefined }}
         >
           <div style={{ minWidth: 0, padding: `0 ${CHAT_COLUMN_PADDING}px` }}>
             <div ref={messageContentRef} onPointerUp={captureQuotedSelection} style={{ width: "100%", minWidth: 0, maxWidth: "var(--chat-content-max-width, 820px)", margin: "0 auto" }}>
@@ -1147,7 +1224,9 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
                   if (blocks.length === 0) continue;
                   processRefIdx ??= visibleRefIndexByMessage.get(processIdx);
                   processToolCount += countToolCallBlocks(blocks);
-                  revealProcess ||= Boolean(pendingSearchScroll && entryIds[processIdx] === pendingSearchScroll.entryId && (!searchBlock || blocks.includes(searchBlock)));
+                  revealProcess ||= Boolean(pendingSearchScroll && entryIds[processIdx] === pendingSearchScroll.entryId && (pendingSearchScroll.toolCallId
+                    ? blocks.some((block) => block.type === "toolCall" && block.toolCallId === pendingSearchScroll.toolCallId)
+                    : (!searchBlock || blocks.includes(searchBlock))));
                   processViews.push(renderMessage(processIdx, {
                     attachRef: false,
                     keyPrefix: "process",
@@ -1238,7 +1317,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
             </div>
           </div>
         </div>
-        {isMobile || pendingScrollRestore ? null : (
+        {isMobile || pendingScrollRestore || locatingJump ? null : (
           <ChatMinimap
             messages={messages}
             streamingMessage={streamState.streamingMessage}

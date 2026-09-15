@@ -1,6 +1,7 @@
 "use client";
 
 import type { TrajectoryRecord, TrajectoryTurn } from "@/lib/trajectory/types";
+import { TRAJECTORY_KIND_LABEL_KEYS } from "@/lib/trajectory/labels";
 import { useI18n } from "@/hooks/useI18n";
 
 interface Props {
@@ -11,19 +12,8 @@ interface Props {
   loadingEarlier: boolean;
   onLoadEarlier: () => void;
   onSelect: (record: TrajectoryRecord) => void;
+  onJump?: (record: TrajectoryRecord) => void;
 }
-
-const kindKeys: Record<TrajectoryRecord["kind"], string> = {
-  user: "trajectory.user",
-  assistant: "trajectory.assistant",
-  tool: "trajectory.tool",
-  bash: "trajectory.bash",
-  compaction: "trajectory.compaction",
-  modelChange: "trajectory.modelChange",
-  thinkingChange: "trajectory.thinkingChange",
-  branchSummary: "trajectory.branchSummary",
-  custom: "trajectory.custom",
-};
 
 function statusKey(status: TrajectoryRecord["status"]): string {
   if (status === "error") return "trajectory.errorStatus";
@@ -45,16 +35,17 @@ function statusColor(status: TrajectoryRecord["status"]): string {
   return "var(--text-muted)";
 }
 
-function RecordButton({ record, selectedId, onSelect, t }: {
+function RecordButton({ record, selectedId, onSelect, onJump, t }: {
   record: TrajectoryRecord;
   selectedId: string | null;
   onSelect: (record: TrajectoryRecord) => void;
+  onJump?: (record: TrajectoryRecord) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const selected = selectedId === record.id;
   const duration = formatDuration(record.durationMs);
   const label = [
-    t(kindKeys[record.kind]),
+    t(TRAJECTORY_KIND_LABEL_KEYS[record.kind]),
     record.summary,
     t(statusKey(record.status)),
     duration,
@@ -65,11 +56,20 @@ function RecordButton({ record, selectedId, onSelect, t }: {
       type="button"
       data-trajectory-record={record.id}
       data-trajectory-kind={record.kind}
+      data-trajectory-status={record.status}
       aria-label={label}
       aria-pressed={selected}
       onClick={() => onSelect(record)}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          // Enter on the selected record jumps to its chat position; Enter on
+          // another record selects it without stealing the native behavior.
+          if (selected && onJump) onJump(record);
+          else onSelect(record);
+          return;
+        }
+        if (event.key === " ") {
           event.preventDefault();
           onSelect(record);
         }
@@ -83,7 +83,7 @@ function RecordButton({ record, selectedId, onSelect, t }: {
         padding: "9px 10px",
         border: `1px solid ${selected ? "var(--trajectory-kind-color, var(--accent))" : "transparent"}`,
         borderRadius: 5,
-        background: selected ? "var(--bg-selected)" : "transparent",
+        background: selected ? "var(--bg-selected)" : record.status === "error" ? "var(--trajectory-error-bg)" : "transparent",
         boxShadow: selected ? "inset 3px 0 var(--trajectory-kind-color, var(--accent))" : "none",
         color: "var(--text)",
         cursor: "pointer",
@@ -94,7 +94,7 @@ function RecordButton({ record, selectedId, onSelect, t }: {
       <span style={{ minWidth: 0 }}>
         <span style={{ display: "flex", alignItems: "baseline", gap: 7, minWidth: 0 }}>
           <span style={{ color: "var(--trajectory-kind-color, var(--text-muted))", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", flexShrink: 0 }}>
-            {t(kindKeys[record.kind])}
+            {t(TRAJECTORY_KIND_LABEL_KEYS[record.kind])}
           </span>
           <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, fontWeight: 600 }}>
             {record.summary}
@@ -103,6 +103,11 @@ function RecordButton({ record, selectedId, onSelect, t }: {
         {record.preview && (
           <span style={{ display: "block", marginTop: 4, overflow: "hidden", color: "var(--text-muted)", fontSize: 12, lineHeight: 1.4, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {record.preview}
+          </span>
+        )}
+        {record.status === "error" && record.error && (
+          <span style={{ display: "block", marginTop: 3, overflow: "hidden", color: "var(--trajectory-error)", fontSize: 11, lineHeight: 1.4, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {record.error}
           </span>
         )}
       </span>
@@ -114,7 +119,7 @@ function RecordButton({ record, selectedId, onSelect, t }: {
   );
 }
 
-export function TrajectoryLedger({ turns, liveRecords, selectedId, hasEarlier, loadingEarlier, onLoadEarlier, onSelect }: Props) {
+export function TrajectoryLedger({ turns, liveRecords, selectedId, hasEarlier, loadingEarlier, onLoadEarlier, onSelect, onJump }: Props) {
   const { t } = useI18n();
   return (
     <section data-trajectory-ledger="true" aria-labelledby="trajectory-ledger-heading" style={{ minWidth: 0, padding: "14px 16px 28px" }}>
@@ -145,7 +150,7 @@ export function TrajectoryLedger({ turns, liveRecords, selectedId, hasEarlier, l
               </h3>
               <div style={{ borderLeft: "1px solid var(--border)", paddingLeft: 7 }}>
                 {turn.records.map((record) => (
-                  <RecordButton key={record.id} record={record} selectedId={selectedId} onSelect={onSelect} t={t} />
+                  <RecordButton key={record.id} record={record} selectedId={selectedId} onSelect={onSelect} onJump={onJump} t={t} />
                 ))}
               </div>
             </article>
@@ -157,7 +162,7 @@ export function TrajectoryLedger({ turns, liveRecords, selectedId, hasEarlier, l
               </h3>
               <div style={{ borderLeft: "1px solid var(--accent)", paddingLeft: 7 }}>
                 {liveRecords.map((record) => (
-                  <RecordButton key={record.id} record={record} selectedId={selectedId} onSelect={onSelect} t={t} />
+                  <RecordButton key={record.id} record={record} selectedId={selectedId} onSelect={onSelect} onJump={onJump} t={t} />
                 ))}
               </div>
             </article>

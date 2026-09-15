@@ -160,10 +160,21 @@ export function AppShell() {
   const handleSessionScrollPositionChange = useCallback((sessionId: string, position: ChatScrollPosition) => {
     sessionScrollPositionsRef.current.set(sessionId, position);
   }, []);
-  const [searchTarget, setSearchTarget] = useState<{ sessionId: string; entryId: string; blockIndex?: number } | null>(null);
+  const [searchTarget, setSearchTarget] = useState<{ sessionId: string; entryId: string; blockIndex?: number; toolCallId?: string } | null>(null);
   const handleSearchTargetHandled = useCallback((target: { sessionId: string; entryId: string }) => {
     setSearchTarget((current) => current === target ? null : current);
   }, []);
+  // Trajectory inspector jump: return to chat and reuse the search-target
+  // scroll pipeline (deep history pages + highlight).
+  const handleJumpToChat = useCallback((target: { entryId: string; toolCallId?: string }) => {
+    if (!selectedSession) return;
+    setChatViewMode("chat");
+    setSearchTarget({
+      sessionId: selectedSession.id,
+      entryId: target.entryId,
+      ...(target.toolCallId ? { toolCallId: target.toolCallId } : {}),
+    });
+  }, [selectedSession]);
   const [explorerRefreshKey, setExplorerRefreshKey] = useState(0);
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
   const [palette, setPalette] = useState<{ open: boolean; mode: PaletteMode | null }>({ open: false, mode: null });
@@ -2363,6 +2374,7 @@ export function AppShell() {
               viewMode={chatViewMode}
               searchTarget={searchTarget?.sessionId === selectedSession?.id ? searchTarget : null}
               onSearchTargetHandled={handleSearchTargetHandled}
+              onJumpToChat={handleJumpToChat}
               initialScrollPosition={selectedSession ? sessionScrollPositionsRef.current.get(selectedSession.id) ?? null : null}
               onScrollPositionChange={handleSessionScrollPositionChange}
               sessionRunning={Boolean(selectedSession && runningSessionIds.has(selectedSession.id))}

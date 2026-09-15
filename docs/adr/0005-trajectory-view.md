@@ -48,6 +48,20 @@ compaction, reconnect, and branch navigation.
    transient `turn:live` block rather than fabricating a persisted user entry.
    Role-specific theme tokens are independent from status indicators so color
    does not carry meaning alone.
+10. Project assistant thinking blocks as their own `thinking` records and show
+    a bounded `name(key=value, …)` call signature for tool records. Tool result
+    text moves to `resultPreview`/the inspector instead of replacing the call
+    preview, so the ledger describes what was requested rather than what came
+    back.
+11. Search the active branch through a dedicated bounded endpoint instead of
+    filtering only loaded pages. Query length, result count, scanned matches,
+    and wall-clock time are capped; search matches message text, thinking, and
+    tool call names/arguments, while closing the search clears its state.
+12. Reuse the chat search-target pipeline for jumps. A jump switches back to
+    chat, loads bounded older pages, scrolls to the entry (or exact tool call
+    block), highlights it, and shows a dismissible notice when the position is
+    beyond the loaded bound. Inspector jumps use the same path rather than
+    opening Full History.
 
 ## Alternatives considered
 
@@ -56,6 +70,20 @@ compaction, reconnect, and branch navigation.
 Rejected. The exporter loads a complete tree and runs independently in a new
 window, which is unsuitable for incremental loading, live state, and the
 existing composer/SSE lifecycle.
+
+### Split assistant thinking into its own record kind
+
+Accepted. Thinking is assistant content, but readers scan reasoning and answers
+differently, and the search filter needs to address them separately. The extra
+kind is mechanical: label keys, a role color token, inspectability, and a
+`recordId` detail parameter keep one assistant entry's rows distinct.
+
+### Search only the loaded ledger window client-side
+
+Rejected. The pane loads bounded turn pages, so client-only filtering would
+silently miss older matches. The server scans the active branch under explicit
+caps and reports `truncated`; anchoring a page on a hit then needs one request
+instead of replaying every page in between.
 
 ### Add a second SSE connection for Trajectory
 
@@ -83,5 +111,10 @@ row model.
 - The API and UI need separate loading/error handling from Chat context pages.
 - Active-branch projection must be retested whenever session-tree semantics
   change.
+- Search adds one bounded scan route and one extra page-fetch mode (`anchor`);
+  jumping to an anchored page replaces the loaded window, so the pane must
+  expose `hasLater` and a way back to the tail.
+- Chat jumps reuse `searchTarget`, so improvements to that pipeline (deeper page
+  loading, tool-call anchors, failure notice) also benefit session search.
 - Users get an actionable execution view without changing existing session
   files or the Full History contract.

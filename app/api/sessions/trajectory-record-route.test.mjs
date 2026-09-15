@@ -20,6 +20,11 @@ test("trajectory detail route prefers live sessions and never accepts a file pat
   assert.match(routeSource, /Cache-Control.*no-store/);
 });
 
+test("trajectory detail route resolves records by id so thinking rows stay distinct", () => {
+  assert.match(routeSource, /recordId = readOptionalId\(url\.searchParams\.get\("recordId"\), "recordId"\)/);
+  assert.match(routeSource, /buildTrajectoryRecordDetail\(branch, entryId, toolCallId, recordId\)/);
+});
+
 test("trajectory detail route uses generic errors for unexpected failures", () => {
   assert.match(routeSource, /Unable to load trajectory record/);
   assert.doesNotMatch(routeSource, /NextResponse\.json\(\{ error: String\(error\) \}/);

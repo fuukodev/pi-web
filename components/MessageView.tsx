@@ -1039,6 +1039,7 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
 
   return (
     <div
+      data-tool-call-id={block.toolCallId}
       style={{
         borderRadius: 7,
         overflow: "hidden",

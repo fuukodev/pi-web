@@ -6,6 +6,7 @@ const pane = await readFile(new URL("./TrajectoryPane.tsx", import.meta.url), "u
 const ledger = await readFile(new URL("./TrajectoryLedger.tsx", import.meta.url), "utf8");
 const inspector = await readFile(new URL("./TrajectoryInspector.tsx", import.meta.url), "utf8");
 const overview = await readFile(new URL("./TrajectoryOverview.tsx", import.meta.url), "utf8");
+const search = await readFile(new URL("./TrajectorySearch.tsx", import.meta.url), "utf8");
 const globals = await readFile(new URL("../../app/globals.css", import.meta.url), "utf8");
 
 test("trajectory pane separates data loading from the ledger and exposes accessible regions", () => {
@@ -59,9 +60,95 @@ test("trajectory records expose role colors separately from status colors", () =
   assert.match(ledger, /data-trajectory-kind=\{record\.kind\}/);
   assert.match(ledger, /var\(--trajectory-kind-color/);
   assert.match(inspector, /data-trajectory-kind=\{record\.kind\}/);
-  for (const token of ["--trajectory-user", "--trajectory-assistant", "--trajectory-tool", "--trajectory-bash", "--trajectory-meta"]) {
+  for (const token of ["--trajectory-user", "--trajectory-assistant", "--trajectory-thinking", "--trajectory-tool", "--trajectory-bash", "--trajectory-meta"]) {
     assert.match(globals, new RegExp(token));
   }
+});
+
+test("search button sits left of retry and opens an inline search bar", () => {
+  const searchIndex = pane.indexOf('aria-label={t("trajectory.search")}');
+  const retryIndex = pane.indexOf('aria-label={t("trajectory.retry")}');
+  assert.ok(searchIndex > 0, "search button missing");
+  assert.ok(retryIndex > 0, "retry button missing");
+  assert.ok(searchIndex < retryIndex, "search button must precede retry");
+  assert.match(pane, /useTrajectorySearch/);
+  assert.match(pane, /<TrajectorySearch/);
+});
+
+test("search UI exposes a type selector, combobox nav, and a close control", () => {
+  assert.match(search, /aria-haspopup="listbox"/);
+  assert.match(search, /role="combobox"/);
+  assert.match(search, /role="option"/);
+  assert.match(search, /ArrowDown/);
+  assert.match(search, /ArrowUp/);
+  assert.match(search, /onSelectMatch/);
+  assert.match(search, /trajectory\.searchClose/);
+  assert.match(search, /trajectory\.searchFieldThinking/);
+  assert.match(search, /scrollIntoView\(\{ block: "nearest" \}\)/);
+  // The prefix hint is a tooltip only; an empty search shows no status text.
+  assert.doesNotMatch(search, /\? t\("trajectory\.searchHint"\)/);
+  assert.match(search, /title=\{t\("trajectory\.searchHint"\)\}/);
+  assert.match(search, /id="trajectory-search-hint"/);
+  assert.match(search, /aria-describedby="trajectory-search-hint"/);
+});
+
+test("the header search icon button centers its glyph", () => {
+  assert.match(pane, /placeItems: "center", width: 30, height: 30, padding: 0/);
+});
+
+test("selecting a search result loads its turn, selects it, and scrolls the ledger", () => {
+  assert.match(pane, /ensureTurnLoaded/);
+  assert.match(pane, /pendingScrollRecordId/);
+  assert.match(pane, /data-trajectory-record/);
+  assert.match(pane, /trajectory\.selectRecord\(match\.record\)/);
+  const closeIndex = pane.indexOf('setSearchOpen(false);\n    void trajectory.selectRecord(match.record)');
+  assert.ok(closeIndex > 0, "search must close before scrolling to a hit");
+});
+
+test("mobile inspector drawer takes focus, closes on escape, and restores focus", () => {
+  assert.match(pane, /mobileDialogRef/);
+  assert.match(pane, /mobileDialogRef\.current\?\.focus\(\)/);
+  assert.match(pane, /event\.key !== "Escape"/);
+  assert.match(pane, /tabIndex=\{-1\}/);
+  assert.match(pane, /\[data-trajectory-record="\$\{CSS\.escape\(recordId\)\}"\][\s\S]*?\.focus\(\)/);
+});
+
+test("offers a jump to latest when an anchored page hides newer turns", () => {
+  assert.match(pane, /page\?\.hasLater/);
+  assert.match(pane, /trajectory\.latest/);
+  assert.match(pane, /trajectory\.reload\(\)/);
+});
+
+test("inspector offers an icon jump-to-chat button left of close", () => {
+  const jumpIndex = inspector.indexOf('aria-label={t("trajectory.jumpToChat")}');
+  const closeIndex = inspector.indexOf('aria-label={t("trajectory.closeInspector")}');
+  assert.ok(jumpIndex > 0, "jump button missing");
+  assert.ok(closeIndex > 0, "close button missing");
+  assert.ok(jumpIndex < closeIndex, "jump button must precede close");
+  assert.match(inspector, /onJumpToChat/);
+  assert.match(pane, /jumpToChat/);
+  assert.match(pane, /onJumpToChat=\{\(\) => jumpToChat\(inspectorRecord\)\}/);
+});
+
+test("enter on the selected record jumps to chat while space keeps selecting", () => {
+  assert.match(ledger, /if \(selected && onJump\) onJump\(record\)/);
+  assert.match(ledger, /event\.key === " "/);
+  assert.match(pane, /addEventListener\("keydown"/);
+  assert.match(pane, /jumpToChat\(trajectory\.selectedRecord\)/);
+});
+
+test("failed records are marked red across the ledger, search, and inspector", () => {
+  assert.match(ledger, /data-trajectory-status=\{record\.status\}/);
+  assert.match(ledger, /record\.status === "error" \? "var\(--trajectory-error-bg\)" : "transparent"/);
+  assert.match(ledger, /record\.status === "error" && record\.error/);
+  assert.match(overview, /if \(status === "error"\) return "var\(--trajectory-error\)"/);
+  assert.match(overview, /status === "error" && <span aria-hidden="true" style=\{\{ fontWeight: 700 \}\}>!<\/span>/);
+  assert.match(inspector, /data-trajectory-status=\{record\.status\}/);
+  assert.match(inspector, /role="alert"[\s\S]*?record\.error/);
+  assert.match(search, /data-trajectory-status=\{match\.record\.status\}/);
+  assert.match(search, /trajectory\.errorStatus/);
+  assert.match(globals, /--trajectory-error-bg/);
+  assert.match(globals, /\[data-trajectory-status="error"\] \{ --trajectory-kind-color: var\(--trajectory-error\); \}/);
 });
 
 test("inspector renders bounded JSON as text and links to Full History", () => {

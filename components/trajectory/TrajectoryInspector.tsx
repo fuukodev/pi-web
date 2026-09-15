@@ -12,6 +12,7 @@ interface Props {
   loading: boolean;
   error: string | null;
   onClose?: () => void;
+  onJumpToChat?: () => void;
 }
 
 function jsonText(value: unknown): string {
@@ -45,7 +46,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, loading, error, onClose }: Props) {
+export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, loading, error, onClose, onJumpToChat }: Props) {
   const { t } = useI18n();
   if (!record) {
     return (
@@ -62,16 +63,39 @@ export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, l
   const result = detail?.result?.message?.content ?? detail?.result;
 
   return (
-    <aside data-trajectory-inspector="true" data-trajectory-kind={record.kind} role="complementary" aria-labelledby="trajectory-inspector-heading" style={{ minWidth: 0, height: "100%", overflow: "auto", padding: 16, borderLeft: "3px solid var(--trajectory-kind-color, var(--border))", background: "var(--bg-panel)" }}>
+    <aside data-trajectory-inspector="true" data-trajectory-kind={record.kind} data-trajectory-status={record.status} role="complementary" aria-labelledby="trajectory-inspector-heading" style={{ minWidth: 0, height: "100%", overflow: "auto", padding: 16, borderLeft: "3px solid var(--trajectory-kind-color, var(--border))", background: "var(--bg-panel)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <h2 id="trajectory-inspector-heading" style={{ margin: 0, overflow: "hidden", color: "var(--text)", fontSize: 14, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.summary}</h2>
           <div style={{ marginTop: 4, color: "var(--trajectory-kind-color, var(--text-dim))", fontSize: 11 }}>{t(`trajectory.${record.kind === "branchSummary" ? "branchSummary" : record.kind}`)}</div>
         </div>
-        {onClose && (
-          <button type="button" onClick={onClose} aria-label={t("trajectory.closeInspector")} title={t("trajectory.closeInspector")} style={{ flexShrink: 0, width: 28, height: 28, border: "1px solid var(--border)", borderRadius: 4, background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: 16 }}>×</button>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+          {onJumpToChat && (
+            <button
+              type="button"
+              onClick={onJumpToChat}
+              aria-label={t("trajectory.jumpToChat")}
+              title={t("trajectory.jumpToChat")}
+              style={{ width: 28, height: 28, display: "grid", placeItems: "center", border: "1px solid var(--border)", borderRadius: 4, background: "transparent", color: "var(--text-muted)", cursor: "pointer" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                <path d="M8 9h8" />
+                <path d="M8 13h5" />
+              </svg>
+            </button>
+          )}
+          {onClose && (
+            <button type="button" onClick={onClose} aria-label={t("trajectory.closeInspector")} title={t("trajectory.closeInspector")} style={{ flexShrink: 0, width: 28, height: 28, border: "1px solid var(--border)", borderRadius: 4, background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: 16 }}>×</button>
+          )}
+        </div>
       </div>
+
+      {record.status === "error" && record.error && (
+        <div role="alert" style={{ marginTop: 12, padding: "8px 10px", border: "1px solid var(--trajectory-error)", borderRadius: 4, background: "var(--trajectory-error-bg)", color: "var(--trajectory-error)", fontSize: 12, lineHeight: 1.5, overflowWrap: "anywhere" }}>
+          {record.error}
+        </div>
+      )}
 
       <Section title={t("trajectory.summary")}>
         <div style={{ color: "var(--text)", fontSize: 12, lineHeight: 1.5 }}>{record.preview ?? t("trajectory.notAvailable")}</div>
