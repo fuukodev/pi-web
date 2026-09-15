@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } fr
 import { useRouter, useSearchParams } from "next/navigation";
 import { useGlobalKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { SessionSidebar } from "./SessionSidebar";
-import { ChatWindow } from "./ChatWindow";
+import { ChatWindow, type ChatViewMode } from "./ChatWindow";
 import type { ChatScrollPosition } from "@/lib/chat-scroll-position";
 import { FileViewer } from "./FileViewer";
 import { TabBar, type Tab } from "./TabBar";
@@ -122,6 +122,7 @@ export function AppShell() {
     if (soundEnabledRef.current) playDoneSound();
   }, [playDoneSound, soundEnabledRef]);
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
+  const [chatViewMode, setChatViewMode] = useState<ChatViewMode>("chat");
   const [sessionCatalog, setSessionCatalog] = useState<SessionInfo[]>([]);
   const handleSessionsChange = useCallback((sessions: SessionInfo[]) => {
     setSessionCatalog(sessions);
@@ -1045,6 +1046,10 @@ export function AppShell() {
     );
   }, [selectedSession]);
 
+  useEffect(() => {
+    setChatViewMode("chat");
+  }, [selectedSession?.id]);
+
   // Show chat area if a session is selected, or if we have a cwd to start a new session in
   const effectiveNewSessionCwd = newSessionCwd ?? (selectedSession === null && activeCwd ? activeCwd : null);
   const newSessionDraftKey = selectedSession === null && effectiveNewSessionCwd
@@ -1371,6 +1376,46 @@ export function AppShell() {
             <path d="M12 7v5l3 2" />
           </svg>
           {!mobile && <span>{translate("history.label")}</span>}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!selectedSession) return;
+            setChatViewMode((mode) => mode === "chat" ? "trajectory" : "chat");
+            if (mobile && isNarrowMobile) setMobileToolbarMoreOpen(true);
+          }}
+          disabled={!selectedSession}
+          title={translate("trajectory.label")}
+          aria-label={translate("trajectory.label")}
+          aria-pressed={chatViewMode === "trajectory"}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            width: mobile ? TOP_BAR_ICON_BUTTON_SIZE : undefined,
+            height: "100%", padding: mobile ? 0 : "0 12px",
+            background: chatViewMode === "trajectory" ? "var(--bg-selected)" : "none",
+            border: "none", borderTop: chatViewMode === "trajectory" ? "2px solid var(--accent)" : "2px solid transparent",
+            borderRight: "1px solid var(--border)",
+            color: selectedSession ? (chatViewMode === "trajectory" ? "var(--text)" : "var(--text-muted)") : "var(--text-dim)",
+            cursor: selectedSession ? "pointer" : "not-allowed",
+            opacity: selectedSession ? 1 : 0.45,
+            flexShrink: 0, fontSize: 11, whiteSpace: "nowrap",
+            transition: "color 0.1s, background 0.1s, opacity 0.1s",
+          }}
+          onMouseEnter={(event) => {
+            if (selectedSession) event.currentTarget.style.color = "var(--text)";
+          }}
+          onMouseLeave={(event) => {
+            event.currentTarget.style.color = selectedSession
+              ? (chatViewMode === "trajectory" ? "var(--text)" : "var(--text-muted)")
+              : "var(--text-dim)";
+          }}
+          data-mobile-toolbar-action={mobile ? "trajectory" : undefined}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 18h16M4 12h10M4 6h16" />
+            <circle cx="18" cy="12" r="2" />
+          </svg>
+          {!mobile && <span>{translate("trajectory.label")}</span>}
         </button>
         {(() => {
           // 上下文压缩后当前消息可能不再包含 user 消息，需同时参考会话文件的消息总数。
@@ -2315,6 +2360,7 @@ export function AppShell() {
             <ChatWindow
               key={sessionKey}
               session={selectedSession}
+              viewMode={chatViewMode}
               searchTarget={searchTarget?.sessionId === selectedSession?.id ? searchTarget : null}
               onSearchTargetHandled={handleSearchTargetHandled}
               initialScrollPosition={selectedSession ? sessionScrollPositionsRef.current.get(selectedSession.id) ?? null : null}

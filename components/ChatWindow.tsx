@@ -23,6 +23,7 @@ import type { SessionStatsInfo } from "@/lib/pi-types";
 import type { AppUpdateResponse } from "@/lib/api-types";
 import type { ToolEntry } from "@/lib/tool-presets";
 import { findChatScrollAnchor, type ChatScrollPosition } from "@/lib/chat-scroll-position";
+import { TrajectoryPane } from "./trajectory/TrajectoryPane";
 import {
   captureScrollDistance,
   getPromptAnchorSpacerHeight,
@@ -32,8 +33,11 @@ import {
   VISIBLE_PAGE_SIZE,
 } from "@/lib/chat-lazy-load";
 
+export type ChatViewMode = "chat" | "trajectory";
+
 interface Props {
   session: SessionInfo | null;
+  viewMode?: ChatViewMode;
   searchTarget?: { sessionId: string; entryId: string; blockIndex?: number } | null;
   onSearchTargetHandled?: (target: { sessionId: string; entryId: string }) => void;
   initialScrollPosition?: ChatScrollPosition | null;
@@ -240,7 +244,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
   );
 }
 
-export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, onOpenSession, onAskInNewChat, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
+export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, onOpenSession, onAskInNewChat, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const completionNotificationsEnabled = session?.relation?.kind !== "subagent";
@@ -982,6 +986,18 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
         {extensionCustomUi && (
           <ExtensionCustomPanel key={extensionCustomUi.id} request={extensionCustomUi} onInput={sendExtensionCustomInput} />
         )}
+        <TrajectoryPane
+          session={session}
+          activeLeafId={activeLeafId}
+          enabled={viewMode === "trajectory"}
+          agentRunning={agentRunning}
+          bashRunning={bashRunning}
+          pendingBash={pendingBash}
+          isCompacting={isCompacting}
+          agentPhase={agentPhase}
+          streamState={streamState}
+        />
+        {viewMode === "trajectory" ? null : <>
         {!isEmptyNew && <>
         <div
           ref={scrollContainerRef}
@@ -1231,6 +1247,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
             onRevealHistory={revealHistoryForMinimap}
           />
         )}
+        </>}
         </>}
       </div>
 
