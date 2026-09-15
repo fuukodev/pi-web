@@ -38,10 +38,10 @@ function formatDuration(durationMs: number | undefined): string | null {
   return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)} s`;
 }
 
-function recordColor(record: TrajectoryRecord): string {
-  if (record.status === "error") return "var(--text)";
-  if (record.status === "running") return "var(--accent)";
-  if (record.status === "unknown") return "var(--text-dim)";
+function statusColor(status: TrajectoryRecord["status"]): string {
+  if (status === "error") return "var(--trajectory-error)";
+  if (status === "running") return "var(--accent)";
+  if (status === "unknown") return "var(--text-dim)";
   return "var(--text-muted)";
 }
 
@@ -64,6 +64,7 @@ function RecordButton({ record, selectedId, onSelect, t }: {
     <button
       type="button"
       data-trajectory-record={record.id}
+      data-trajectory-kind={record.kind}
       aria-label={label}
       aria-pressed={selected}
       onClick={() => onSelect(record)}
@@ -80,18 +81,19 @@ function RecordButton({ record, selectedId, onSelect, t }: {
         alignItems: "start",
         width: "100%",
         padding: "9px 10px",
-        border: `1px solid ${selected ? "var(--accent)" : "transparent"}`,
+        border: `1px solid ${selected ? "var(--trajectory-kind-color, var(--accent))" : "transparent"}`,
         borderRadius: 5,
         background: selected ? "var(--bg-selected)" : "transparent",
+        boxShadow: selected ? "inset 3px 0 var(--trajectory-kind-color, var(--accent))" : "none",
         color: "var(--text)",
         cursor: "pointer",
         textAlign: "left",
       }}
     >
-      <span aria-hidden="true" style={{ width: 5, height: 5, marginTop: 5, borderRadius: "50%", background: recordColor(record) }} />
+      <span aria-hidden="true" style={{ width: 4, minHeight: 18, alignSelf: "stretch", borderRadius: 2, background: "var(--trajectory-kind-color, var(--text-muted))" }} />
       <span style={{ minWidth: 0 }}>
         <span style={{ display: "flex", alignItems: "baseline", gap: 7, minWidth: 0 }}>
-          <span style={{ color: recordColor(record), fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", flexShrink: 0 }}>
+          <span style={{ color: "var(--trajectory-kind-color, var(--text-muted))", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", flexShrink: 0 }}>
             {t(kindKeys[record.kind])}
           </span>
           <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, fontWeight: 600 }}>
@@ -104,7 +106,7 @@ function RecordButton({ record, selectedId, onSelect, t }: {
           </span>
         )}
       </span>
-      <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, color: recordColor(record), fontSize: 10, whiteSpace: "nowrap" }}>
+      <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, color: statusColor(record.status), fontSize: 10, whiteSpace: "nowrap" }}>
         <span>{t(statusKey(record.status))}</span>
         {duration && <span style={{ color: "var(--text-dim)" }}>{duration}</span>}
       </span>
