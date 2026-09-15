@@ -146,6 +146,7 @@ export const enLocale: LocalePlugin = {
     "trajectory.unknown": "Unknown",
     "trajectory.user": "User",
     "trajectory.assistant": "Assistant",
+    "trajectory.thinking": "Thinking",
     "trajectory.tool": "Tool",
     "trajectory.bash": "Command",
     "trajectory.compaction": "Compaction",

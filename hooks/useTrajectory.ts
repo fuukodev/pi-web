@@ -178,6 +178,8 @@ export function useTrajectory({
     const params = new URLSearchParams();
     if (activeLeafId) params.set("leafId", activeLeafId);
     if (record.toolCallId) params.set("toolCallId", record.toolCallId);
+    // Stable record ids keep thinking rows distinct from their assistant entry.
+    params.set("recordId", record.id);
     const query = params.toString();
     try {
       const response = await fetch(

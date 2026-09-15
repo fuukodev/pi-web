@@ -16,6 +16,7 @@ interface Props {
 const kindKeys: Record<TrajectoryRecord["kind"], string> = {
   user: "trajectory.user",
   assistant: "trajectory.assistant",
+  thinking: "trajectory.thinking",
   tool: "trajectory.tool",
   bash: "trajectory.bash",
   compaction: "trajectory.compaction",

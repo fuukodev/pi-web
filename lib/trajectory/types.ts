@@ -3,6 +3,7 @@ import type { AgentUsage } from "../types";
 export type TrajectoryRecordKind =
   | "user"
   | "assistant"
+  | "thinking"
   | "tool"
   | "bash"
   | "compaction"
@@ -33,6 +34,8 @@ export interface TrajectoryRecord {
   parentId?: string;
   summary: string;
   preview?: string;
+  /** Tool result text, kept separate from the call signature in `preview`. */
+  resultPreview?: string;
   error?: string;
   timestamp?: string;
   durationMs?: number;

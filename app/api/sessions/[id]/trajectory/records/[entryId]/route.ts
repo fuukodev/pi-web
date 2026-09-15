@@ -34,9 +34,11 @@ export async function GET(
   const url = new URL(req.url);
   let leafId: string | undefined;
   let toolCallId: string | undefined;
+  let recordId: string | undefined;
   try {
     leafId = readOptionalId(url.searchParams.get("leafId"), "leafId");
     toolCallId = readOptionalId(url.searchParams.get("toolCallId"), "toolCallId");
+    recordId = readOptionalId(url.searchParams.get("recordId"), "recordId");
   } catch (error) {
     const message = error instanceof TrajectoryDetailError ? error.message : "Invalid trajectory query";
     return NextResponse.json({ error: message }, { status: 400 });
@@ -58,7 +60,7 @@ export async function GET(
       return NextResponse.json({ error: "Trajectory record not found" }, { status: 404 });
     }
 
-    const detail = buildTrajectoryRecordDetail(branch, entryId, toolCallId);
+    const detail = buildTrajectoryRecordDetail(branch, entryId, toolCallId, recordId);
     return NextResponse.json(detail, {
       headers: { "Cache-Control": "no-store" },
     });

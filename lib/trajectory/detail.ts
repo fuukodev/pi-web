@@ -205,10 +205,13 @@ export function buildTrajectoryRecordDetail(
   entries: readonly SessionEntry[],
   entryId: string,
   toolCallId?: string | null,
+  recordId?: string | null,
 ): TrajectoryRecordDetail {
   const projection = projectTrajectory(entries);
   const record = projection.records.find((candidate) => (
-    (candidate.entryId === entryId || candidate.resultEntryId === entryId)
+    (recordId
+      ? candidate.id === recordId
+      : candidate.entryId === entryId || candidate.resultEntryId === entryId)
       && (!toolCallId || candidate.toolCallId === toolCallId)
   ));
   if (!record) throw new TrajectoryDetailError("not_found", "Trajectory record not found");

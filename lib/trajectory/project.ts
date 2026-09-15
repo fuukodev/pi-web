@@ -4,6 +4,7 @@ import type {
   SessionEntry,
   ToolResultMessage,
 } from "../types";
+import { formatToolCallPreview } from "./tool-preview";
 import type {
   TrajectoryDurationSource,
   TrajectoryProjection,
@@ -65,6 +66,26 @@ function contentPreview(content: unknown): string | undefined {
   }
   const preview = text.join("\n") || thinking.join("\n") || (hasImage ? "[image]" : "");
   return truncate(preview) || undefined;
+}
+
+function blocksOfType(content: unknown, type: "text" | "thinking"): string[] {
+  if (!Array.isArray(content)) return [];
+  const values: string[] = [];
+  for (const block of content) {
+    if (!isRecord(block) || block.type !== type) continue;
+    if (type === "text" && typeof block.text === "string") values.push(block.text);
+    if (type === "thinking" && typeof block.thinking === "string") values.push(block.thinking);
+  }
+  return values;
+}
+
+function textPreview(content: unknown): string | undefined {
+  if (typeof content === "string") return truncate(content) || undefined;
+  return truncate(blocksOfType(content, "text").join("\n")) || undefined;
+}
+
+function thinkingPreview(content: unknown): string | undefined {
+  return truncate(blocksOfType(content, "thinking").join("\n\n")) || undefined;
 }
 
 function readToolCall(block: unknown): ToolCallData | null {
@@ -179,11 +200,20 @@ function projectAssistant(
   record.status = assistantStatus.status;
   record.error = assistantStatus.error;
   record.summary = "Assistant step";
-  record.preview = contentPreview(message.content);
+  record.preview = textPreview(message.content);
   record.provider = message.provider;
   record.modelId = message.model;
   record.usage = message.usage;
   pushRecord(turn, record);
+
+  const thinking = thinkingPreview(message.content);
+  if (thinking) {
+    const thinkingRecord = createRecordBase(turn, entry, "thinking", `thinking:${entry.id}`);
+    thinkingRecord.parentId = record.id;
+    thinkingRecord.summary = "Thinking";
+    thinkingRecord.preview = thinking;
+    pushRecord(turn, thinkingRecord);
+  }
 
   const blocks = Array.isArray(message.content) ? message.content : [];
   for (const block of blocks) {
@@ -197,14 +227,15 @@ function projectAssistant(
     toolRecord.toolCallId = toolCall.id;
     toolRecord.toolName = toolCall.name;
     toolRecord.summary = toolCall.name;
+    toolRecord.preview = formatToolCallPreview(toolCall.name, toolCall.input);
     toolRecord.source.toolCallId = toolCall.id;
     if (result) {
       consumedResultIds.add(result.entry.id);
       toolRecord.resultEntryId = result.entry.id;
       toolRecord.source.resultEntryId = result.entry.id;
-      toolRecord.preview = contentPreview(resultMessage?.content);
+      toolRecord.resultPreview = contentPreview(resultMessage?.content);
       toolRecord.status = resultMessage?.isError ? "error" : "complete";
-      toolRecord.error = resultMessage?.isError ? toolRecord.preview ?? "Tool execution failed" : undefined;
+      toolRecord.error = resultMessage?.isError ? toolRecord.resultPreview ?? "Tool execution failed" : undefined;
       toolRecord.usage = resultMessage?.usage;
       const durationMs = durationBetween(entry.timestamp, result.entry.timestamp);
       if (durationMs !== undefined) {
@@ -228,8 +259,9 @@ function projectToolResult(
   record.toolName = message.toolName;
   record.summary = message.toolName ?? "Orphaned tool result";
   record.preview = contentPreview(message.content);
+  record.resultPreview = record.preview;
   record.status = message.isError ? "error" : "unknown";
-  record.error = message.isError ? record.preview ?? "Tool execution failed" : undefined;
+  record.error = message.isError ? record.resultPreview ?? "Tool execution failed" : undefined;
   record.usage = message.usage;
   record.resultEntryId = entry.id;
   record.source.toolCallId = message.toolCallId;

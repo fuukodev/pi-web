@@ -146,6 +146,7 @@ export const zhTWLocale: LocalePlugin = {
     "trajectory.unknown": "未知",
     "trajectory.user": "使用者",
     "trajectory.assistant": "助理",
+    "trajectory.thinking": "思考",
     "trajectory.tool": "工具",
     "trajectory.bash": "命令",
     "trajectory.compaction": "壓縮",

@@ -38,6 +38,7 @@
   --tool-bg: #f9fafb;
   --trajectory-user: #2563eb;
   --trajectory-assistant: #0f766e;
+  --trajectory-thinking: #0e7490;
   --trajectory-tool: #92400e;
   --trajectory-bash: #7c3aed;
   --trajectory-meta: #64748b;
@@ -66,6 +67,7 @@ html.dark,
   --tool-bg: #222222;
   --trajectory-user: #60a5fa;
   --trajectory-assistant: #2dd4bf;
+  --trajectory-thinking: #67e8f9;
   --trajectory-tool: #fbbf24;
   --trajectory-bash: #a78bfa;
   --trajectory-meta: #94a3b8;
@@ -133,6 +135,7 @@ html[data-theme="pine"],
 
 [data-trajectory-kind="user"] { --trajectory-kind-color: var(--trajectory-user); }
 [data-trajectory-kind="assistant"] { --trajectory-kind-color: var(--trajectory-assistant); }
+[data-trajectory-kind="thinking"] { --trajectory-kind-color: var(--trajectory-thinking); }
 [data-trajectory-kind="tool"] { --trajectory-kind-color: var(--trajectory-tool); }
 [data-trajectory-kind="bash"] { --trajectory-kind-color: var(--trajectory-bash); }
 [data-trajectory-kind="compaction"],
