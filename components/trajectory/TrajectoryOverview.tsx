@@ -8,6 +8,7 @@ interface Props {
   liveRecords: TrajectoryRecord[];
   selectedId: string | null;
   onSelect: (record: TrajectoryRecord) => void;
+  onSelectTurn: (turn: TrajectoryTurn) => void;
 }
 
 function statusColor(status: TrajectoryRecord["status"]): string {
@@ -24,7 +25,7 @@ function turnStatus(turn: TrajectoryTurn): TrajectoryRecord["status"] {
   return "complete";
 }
 
-export function TrajectoryOverview({ turns, liveRecords, selectedId, onSelect }: Props) {
+export function TrajectoryOverview({ turns, liveRecords, selectedId, onSelect, onSelectTurn }: Props) {
   const { t } = useI18n();
   const liveTurn = liveRecords.length > 0 ? {
     id: "turn:live",
@@ -59,10 +60,7 @@ export function TrajectoryOverview({ turns, liveRecords, selectedId, onSelect }:
                 type="button"
                 aria-label={`${t("trajectory.turnCount", { count: index + 1 })} · ${t(`trajectory.${status === "error" ? "errorStatus" : status === "running" ? "running" : status === "unknown" ? "unknown" : "complete"}`)}`}
               aria-pressed={selected}
-              onClick={() => {
-                const first = turn.records[0];
-                if (first) onSelect(first);
-              }}
+              onClick={() => onSelectTurn(turn)}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",

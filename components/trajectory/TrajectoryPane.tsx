@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import type { SessionInfo } from "@/lib/types";
 import type { AgentPhase } from "@/hooks/useAgentSession";
 import type { StreamingState } from "@/lib/streaming-message";
@@ -45,6 +46,7 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const trajectory = useTrajectory(props);
+  const ledgerScrollRef = useRef<HTMLDivElement>(null);
   if (!props.enabled) return null;
 
   const { page, liveRecords, selectedRecord } = trajectory;
@@ -65,6 +67,18 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
   const stats = page?.branchStats;
   const selectRecord = (record: Parameters<typeof trajectory.selectRecord>[0]) => {
     void trajectory.selectRecord(record);
+  };
+  const selectTurn = (turn: (typeof turns)[number]) => {
+    selectRecord(turn.records[0] ?? null);
+    requestAnimationFrame(() => {
+      const container = ledgerScrollRef.current;
+      if (!container) return;
+      const target = Array.from(container.querySelectorAll<HTMLElement>("[data-trajectory-turn]"))
+        .find((element) => element.dataset.trajectoryTurn === turn.id);
+      if (!target) return;
+      const targetTop = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+      container.scrollTo({ top: Math.max(0, targetTop - 8), behavior: "smooth" });
+    });
   };
 
   return (
@@ -93,9 +107,9 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
         <div role="status" style={{ padding: 18, color: "var(--text-muted)", fontSize: 12 }}>{t("trajectory.loading")}</div>
       )}
 
-      <TrajectoryOverview turns={turns} liveRecords={liveRecords} selectedId={selectedRecord?.id ?? null} onSelect={selectRecord} />
+      <TrajectoryOverview turns={turns} liveRecords={liveRecords} selectedId={selectedRecord?.id ?? null} onSelect={selectRecord} onSelectTurn={selectTurn} />
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(300px, 38%)", flex: 1, minHeight: 0 }}>
-        <div style={{ minWidth: 0, minHeight: 0, overflow: "auto" }}>
+        <div ref={ledgerScrollRef} style={{ minWidth: 0, minHeight: 0, overflow: "auto" }}>
           <TrajectoryLedger
             turns={turns}
             liveRecords={liveRecords}
