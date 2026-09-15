@@ -62,11 +62,11 @@ export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, l
   const result = detail?.result?.message?.content ?? detail?.result;
 
   return (
-    <aside data-trajectory-inspector="true" role="complementary" aria-labelledby="trajectory-inspector-heading" style={{ minWidth: 0, height: "100%", overflow: "auto", padding: 16, borderLeft: "1px solid var(--border)", background: "var(--bg-panel)" }}>
+    <aside data-trajectory-inspector="true" data-trajectory-kind={record.kind} role="complementary" aria-labelledby="trajectory-inspector-heading" style={{ minWidth: 0, height: "100%", overflow: "auto", padding: 16, borderLeft: "3px solid var(--trajectory-kind-color, var(--border))", background: "var(--bg-panel)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <h2 id="trajectory-inspector-heading" style={{ margin: 0, overflow: "hidden", color: "var(--text)", fontSize: 14, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.summary}</h2>
-          <div style={{ marginTop: 4, color: "var(--text-dim)", fontSize: 11 }}>{t(`trajectory.${record.kind === "branchSummary" ? "branchSummary" : record.kind}`)}</div>
+          <div style={{ marginTop: 4, color: "var(--trajectory-kind-color, var(--text-dim))", fontSize: 11 }}>{t(`trajectory.${record.kind === "branchSummary" ? "branchSummary" : record.kind}`)}</div>
         </div>
         {onClose && (
           <button type="button" onClick={onClose} aria-label={t("trajectory.closeInspector")} title={t("trajectory.closeInspector")} style={{ flexShrink: 0, width: 28, height: 28, border: "1px solid var(--border)", borderRadius: 4, background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: 16 }}>×</button>

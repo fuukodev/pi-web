@@ -59,10 +59,20 @@ Only the active branch returned by `sliceActiveBranch` is projected.
 
 The trajectory button is part of the existing chat toolbar and mobile More
 menu. Saved sessions enable it; unsaved composers keep the button disabled.
-The pane has named regions for overview, ledger, and inspector. Every record is
-keyboard focusable/selectable, all icon-only controls have translated labels,
-and loading, error, empty, and no-details states are explicit. Layout is
-verified at 320, 768, 1024, and 1440px.
+The pane has named regions for overview and ledger. The inspector is closed by
+default and is rendered only for persisted user, assistant, or tool records;
+clicking the selected record again closes it. Bash, compaction, metadata, and
+live overlay records remain navigable without opening a detail pane.
+
+Overview Turn and Live controls navigate the ledger without selecting a record
+or opening the inspector. Live navigation targets the transient `turn:live`
+ledger block; the v1 live overlay does not fabricate a persisted user entry.
+Every record is keyboard focusable/selectable, all icon-only controls have
+translated labels, and loading, error, empty, and no-details states are
+explicit. Role colors use separate theme tokens for user, assistant, tool,
+bash, and metadata records; status text/markers remain independent so color
+is never the only semantic signal. Layout is verified at 320, 768, 1024, and
+1440px.
 
 ## Project structure
 

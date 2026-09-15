@@ -6,6 +6,7 @@ const pane = await readFile(new URL("./TrajectoryPane.tsx", import.meta.url), "u
 const ledger = await readFile(new URL("./TrajectoryLedger.tsx", import.meta.url), "utf8");
 const inspector = await readFile(new URL("./TrajectoryInspector.tsx", import.meta.url), "utf8");
 const overview = await readFile(new URL("./TrajectoryOverview.tsx", import.meta.url), "utf8");
+const globals = await readFile(new URL("../../app/globals.css", import.meta.url), "utf8");
 
 test("trajectory pane separates data loading from the ledger and exposes accessible regions", () => {
   assert.match(pane, /useTrajectory\(/);
@@ -52,6 +53,15 @@ test("overview turn and live selection navigate without opening the inspector", 
   assert.match(pane, /data-trajectory-turn/);
   assert.match(pane, /scrollTo\(/);
   assert.match(pane, /onSelectLive=\{\(\) => scrollToTurn\("turn:live"\)\}/);
+});
+
+test("trajectory records expose role colors separately from status colors", () => {
+  assert.match(ledger, /data-trajectory-kind=\{record\.kind\}/);
+  assert.match(ledger, /var\(--trajectory-kind-color/);
+  assert.match(inspector, /data-trajectory-kind=\{record\.kind\}/);
+  for (const token of ["--trajectory-user", "--trajectory-assistant", "--trajectory-tool", "--trajectory-bash", "--trajectory-meta"]) {
+    assert.match(globals, new RegExp(token));
+  }
 });
 
 test("inspector renders bounded JSON as text and links to Full History", () => {

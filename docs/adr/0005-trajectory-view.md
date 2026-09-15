@@ -42,6 +42,12 @@ compaction, reconnect, and branch navigation.
    and virtualization until measurements justify them.
 8. Keep Full History as the canonical raw archive. Inspector links may deep-link
    to it, but Trajectory does not duplicate its branch tree or export behavior.
+9. Keep the Inspector closed by default. Only persisted user, assistant, and
+   tool records can open it; repeated selection toggles it closed. Overview
+   Turn and Live controls only navigate the ledger, with Live targeting the
+   transient `turn:live` block rather than fabricating a persisted user entry.
+   Role-specific theme tokens are independent from status indicators so color
+   does not carry meaning alone.
 
 ## Alternatives considered
 

@@ -33,6 +33,12 @@
   --user-bg: #eff6ff;
   --assistant-bg: #ffffff;
   --tool-bg: #f9fafb;
+  --trajectory-user: #2563eb;
+  --trajectory-assistant: #0f766e;
+  --trajectory-tool: #92400e;
+  --trajectory-bash: #7c3aed;
+  --trajectory-meta: #64748b;
+  --trajectory-error: #b91c1c;
   --bg-subtle: rgba(0,0,0,0.03);
   --chat-content-max-width: 820px;
   --chat-content-font-size: 14px;
@@ -52,8 +58,24 @@ html.dark {
   --user-bg: #1e293b;
   --assistant-bg: #1a1a1a;
   --tool-bg: #1f2937;
+  --trajectory-user: #60a5fa;
+  --trajectory-assistant: #2dd4bf;
+  --trajectory-tool: #fbbf24;
+  --trajectory-bash: #a78bfa;
+  --trajectory-meta: #94a3b8;
+  --trajectory-error: #fca5a5;
   --bg-subtle: rgba(255,255,255,0.04);
 }
+
+[data-trajectory-kind="user"] { --trajectory-kind-color: var(--trajectory-user); }
+[data-trajectory-kind="assistant"] { --trajectory-kind-color: var(--trajectory-assistant); }
+[data-trajectory-kind="tool"] { --trajectory-kind-color: var(--trajectory-tool); }
+[data-trajectory-kind="bash"] { --trajectory-kind-color: var(--trajectory-bash); }
+[data-trajectory-kind="compaction"],
+[data-trajectory-kind="modelChange"],
+[data-trajectory-kind="thinkingChange"],
+[data-trajectory-kind="branchSummary"],
+[data-trajectory-kind="custom"] { --trajectory-kind-color: var(--trajectory-meta); }
 
 /* WebKit reports dvh/innerHeight without the status-bar strip for installed
    home-screen apps even though the layout still starts at the screen's top.
