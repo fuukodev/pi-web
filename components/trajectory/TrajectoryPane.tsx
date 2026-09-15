@@ -4,6 +4,8 @@ import { useRef } from "react";
 import type { SessionInfo } from "@/lib/types";
 import type { AgentPhase } from "@/hooks/useAgentSession";
 import type { StreamingState } from "@/lib/streaming-message";
+import type { TrajectoryRecord } from "@/lib/trajectory/types";
+import { isInspectableTrajectoryRecord } from "@/lib/trajectory/selection";
 import { useI18n } from "@/hooks/useI18n";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useTrajectory, type UseTrajectoryResult } from "@/hooks/useTrajectory";
@@ -23,17 +25,18 @@ export interface TrajectoryPaneProps {
   streamState: StreamingState;
 }
 
-function InspectorPanel({ session, activeLeafId, trajectory, onClose }: {
+function InspectorPanel({ session, activeLeafId, trajectory, record, onClose }: {
   session: SessionInfo;
   activeLeafId: string | null;
   trajectory: UseTrajectoryResult;
-  onClose?: () => void;
+  record: TrajectoryRecord;
+  onClose: () => void;
 }) {
   return (
     <TrajectoryInspector
       sessionId={session.id}
       activeLeafId={activeLeafId}
-      record={trajectory.selectedRecord}
+      record={record}
       detail={trajectory.detail}
       loading={trajectory.detailLoading}
       error={trajectory.detailError}
@@ -65,16 +68,19 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
 
   const turns = page?.turns ?? [];
   const stats = page?.branchStats;
+  const inspectorRecord = selectedRecord && isInspectableTrajectoryRecord(selectedRecord)
+    ? selectedRecord
+    : null;
   const selectRecord = (record: Parameters<typeof trajectory.selectRecord>[0]) => {
-    void trajectory.selectRecord(record);
+    const nextRecord = record && selectedRecord?.id === record.id ? null : record;
+    void trajectory.selectRecord(nextRecord);
   };
-  const selectTurn = (turn: (typeof turns)[number]) => {
-    selectRecord(turn.records[0] ?? null);
+  const scrollToTurn = (turnId: string) => {
     requestAnimationFrame(() => {
       const container = ledgerScrollRef.current;
       if (!container) return;
       const target = Array.from(container.querySelectorAll<HTMLElement>("[data-trajectory-turn]"))
-        .find((element) => element.dataset.trajectoryTurn === turn.id);
+        .find((element) => element.dataset.trajectoryTurn === turnId);
       if (!target) return;
       const targetTop = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
       container.scrollTo({ top: Math.max(0, targetTop - 8), behavior: "smooth" });
@@ -107,8 +113,8 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
         <div role="status" style={{ padding: 18, color: "var(--text-muted)", fontSize: 12 }}>{t("trajectory.loading")}</div>
       )}
 
-      <TrajectoryOverview turns={turns} liveRecords={liveRecords} selectedId={selectedRecord?.id ?? null} onSelect={selectRecord} onSelectTurn={selectTurn} />
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(300px, 38%)", flex: 1, minHeight: 0 }}>
+      <TrajectoryOverview turns={turns} liveRecords={liveRecords} selectedId={selectedRecord?.id ?? null} onSelectTurn={(turn) => scrollToTurn(turn.id)} onSelectLive={() => scrollToTurn("turn:live")} />
+      <div style={{ display: "grid", gridTemplateColumns: isMobile || !inspectorRecord ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(300px, 38%)", flex: 1, minHeight: 0 }}>
         <div ref={ledgerScrollRef} style={{ minWidth: 0, minHeight: 0, overflow: "auto" }}>
           <TrajectoryLedger
             turns={turns}
@@ -120,12 +126,12 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
             onSelect={selectRecord}
           />
         </div>
-        {!isMobile && <InspectorPanel session={session} activeLeafId={props.activeLeafId} trajectory={trajectory} />}
+        {!isMobile && inspectorRecord && <InspectorPanel session={session} activeLeafId={props.activeLeafId} trajectory={trajectory} record={inspectorRecord} onClose={() => selectRecord(null)} />}
       </div>
 
-      {isMobile && selectedRecord && (
+      {isMobile && inspectorRecord && (
         <div role="dialog" aria-modal="true" aria-labelledby="trajectory-inspector-heading" style={{ position: "absolute", inset: 0, zIndex: 5, overflow: "auto", background: "var(--bg-panel)", boxShadow: "-8px 0 24px rgba(0,0,0,0.18)" }}>
-          <InspectorPanel session={session} activeLeafId={props.activeLeafId} trajectory={trajectory} onClose={() => void trajectory.selectRecord(null)} />
+          <InspectorPanel session={session} activeLeafId={props.activeLeafId} trajectory={trajectory} record={inspectorRecord} onClose={() => selectRecord(null)} />
         </div>
       )}
     </section>

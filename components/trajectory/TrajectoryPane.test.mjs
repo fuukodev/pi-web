@@ -30,17 +30,28 @@ test("trajectory ledger makes records keyboard-selectable and supports earlier p
   assert.match(ledger, /data-trajectory-record/);
 });
 
+test("only inspectable persisted records open the inspector and repeated clicks close it", () => {
+  assert.match(pane, /isInspectableTrajectoryRecord/);
+  assert.match(pane, /selectedRecord\?\.id === record\.id/);
+  assert.match(pane, /const inspectorRecord =/);
+  assert.match(pane, /inspectorRecord && <InspectorPanel/);
+  assert.match(pane, /gridTemplateColumns:[\s\S]*inspectorRecord/);
+});
+
 test("overview keeps native button semantics inside list items", () => {
   assert.match(overview, /<div role="listitem"[\s\S]*?<button/);
   assert.doesNotMatch(overview, /<button[^>]*role="listitem"/);
 });
 
-test("overview turn selection scrolls the matching ledger turn into view", () => {
+test("overview turn and live selection navigate without opening the inspector", () => {
   assert.match(overview, /onSelectTurn/);
   assert.match(overview, /onSelectTurn\(turn\)/);
+  assert.match(overview, /onSelectLive/);
+  assert.match(overview, /onClick=\{onSelectLive\}/);
   assert.match(pane, /ledgerScrollRef/);
   assert.match(pane, /data-trajectory-turn/);
   assert.match(pane, /scrollTo\(/);
+  assert.match(pane, /onSelectLive=\{\(\) => scrollToTurn\("turn:live"\)\}/);
 });
 
 test("inspector renders bounded JSON as text and links to Full History", () => {
