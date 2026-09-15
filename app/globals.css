@@ -43,6 +43,7 @@
   --trajectory-bash: #7c3aed;
   --trajectory-meta: #64748b;
   --trajectory-error: #b91c1c;
+  --trajectory-error-bg: rgba(185, 28, 28, 0.06);
   --bg-subtle: rgba(0,0,0,0.03);
   --chat-content-max-width: 820px;
   --chat-content-font-size: 14px;
@@ -72,6 +73,7 @@ html.dark,
   --trajectory-bash: #a78bfa;
   --trajectory-meta: #94a3b8;
   --trajectory-error: #fca5a5;
+  --trajectory-error-bg: rgba(248, 113, 113, 0.12);
   --bg-subtle: rgba(255,255,255,0.04);
 }
 
@@ -143,6 +145,8 @@ html[data-theme="pine"],
 [data-trajectory-kind="thinkingChange"],
 [data-trajectory-kind="branchSummary"],
 [data-trajectory-kind="custom"] { --trajectory-kind-color: var(--trajectory-meta); }
+/* Failed calls (tool errors, provider errors, non-zero exits) win over the role color. */
+[data-trajectory-status="error"] { --trajectory-kind-color: var(--trajectory-error); }
 
 /* WebKit reports dvh/innerHeight without the status-bar strip for installed
    home-screen apps even though the layout still starts at the screen's top.

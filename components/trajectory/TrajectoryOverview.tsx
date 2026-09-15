@@ -12,7 +12,7 @@ interface Props {
 }
 
 function statusColor(status: TrajectoryRecord["status"]): string {
-  if (status === "error") return "var(--text)";
+  if (status === "error") return "var(--trajectory-error)";
   if (status === "running") return "var(--accent)";
   if (status === "unknown") return "var(--text-dim)";
   return "var(--text-muted)";
@@ -68,7 +68,7 @@ export function TrajectoryOverview({ turns, liveRecords, selectedId, onSelectTur
                   minWidth: 30,
                 height: 24,
                 padding: "0 6px",
-                border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}`,
+                border: `1px solid ${selected ? (status === "error" ? "var(--trajectory-error)" : "var(--accent)") : "var(--border)"}`,
                 borderRadius: 4,
                 background: selected ? "var(--bg-selected)" : "var(--bg-panel)",
                 color: statusColor(status),

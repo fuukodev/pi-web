@@ -135,6 +135,19 @@ test("enter on the selected record jumps to chat while space keeps selecting", (
   assert.match(pane, /jumpToChat\(trajectory\.selectedRecord\)/);
 });
 
+test("failed records are marked red across the ledger, search, and inspector", () => {
+  assert.match(ledger, /data-trajectory-status=\{record\.status\}/);
+  assert.match(ledger, /record\.status === "error" \? "var\(--trajectory-error-bg\)" : "transparent"/);
+  assert.match(ledger, /record\.status === "error" && record\.error/);
+  assert.match(overview, /if \(status === "error"\) return "var\(--trajectory-error\)"/);
+  assert.match(inspector, /data-trajectory-status=\{record\.status\}/);
+  assert.match(inspector, /role="alert"[\s\S]*?record\.error/);
+  assert.match(search, /data-trajectory-status=\{match\.record\.status\}/);
+  assert.match(search, /trajectory\.errorStatus/);
+  assert.match(globals, /--trajectory-error-bg/);
+  assert.match(globals, /\[data-trajectory-status="error"\] \{ --trajectory-kind-color: var\(--trajectory-error\); \}/);
+});
+
 test("inspector renders bounded JSON as text and links to Full History", () => {
   assert.match(inspector, /JSON\.stringify/);
   assert.match(inspector, /whiteSpace: "pre-wrap"/);

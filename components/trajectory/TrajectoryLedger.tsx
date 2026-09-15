@@ -56,6 +56,7 @@ function RecordButton({ record, selectedId, onSelect, onJump, t }: {
       type="button"
       data-trajectory-record={record.id}
       data-trajectory-kind={record.kind}
+      data-trajectory-status={record.status}
       aria-label={label}
       aria-pressed={selected}
       onClick={() => onSelect(record)}
@@ -82,7 +83,7 @@ function RecordButton({ record, selectedId, onSelect, onJump, t }: {
         padding: "9px 10px",
         border: `1px solid ${selected ? "var(--trajectory-kind-color, var(--accent))" : "transparent"}`,
         borderRadius: 5,
-        background: selected ? "var(--bg-selected)" : "transparent",
+        background: selected ? "var(--bg-selected)" : record.status === "error" ? "var(--trajectory-error-bg)" : "transparent",
         boxShadow: selected ? "inset 3px 0 var(--trajectory-kind-color, var(--accent))" : "none",
         color: "var(--text)",
         cursor: "pointer",
@@ -102,6 +103,11 @@ function RecordButton({ record, selectedId, onSelect, onJump, t }: {
         {record.preview && (
           <span style={{ display: "block", marginTop: 4, overflow: "hidden", color: "var(--text-muted)", fontSize: 12, lineHeight: 1.4, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {record.preview}
+          </span>
+        )}
+        {record.status === "error" && record.error && (
+          <span style={{ display: "block", marginTop: 3, overflow: "hidden", color: "var(--trajectory-error)", fontSize: 11, lineHeight: 1.4, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {record.error}
           </span>
         )}
       </span>

@@ -255,9 +255,10 @@ export function TrajectorySearch({
                 aria-selected={index === activeIndex}
                 data-trajectory-search-result={match.record.id}
                 data-trajectory-kind={match.record.kind}
+                data-trajectory-status={match.record.status}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => onSelectMatch(match)}
-                style={{ display: "block", width: "100%", padding: "8px 12px", border: "none", borderBottom: "1px solid var(--border)", background: index === activeIndex ? "var(--bg-hover)" : "transparent", color: "var(--text)", cursor: "pointer", textAlign: "left" }}
+                style={{ display: "block", width: "100%", padding: "8px 12px", border: "none", borderBottom: "1px solid var(--border)", background: index === activeIndex ? "var(--bg-hover)" : match.record.status === "error" ? "var(--trajectory-error-bg)" : "transparent", color: "var(--text)", cursor: "pointer", textAlign: "left" }}
               >
                 <span style={{ display: "flex", alignItems: "baseline", gap: 7, minWidth: 0 }}>
                   <span style={{ flexShrink: 0, color: "var(--trajectory-kind-color, var(--text-muted))", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
@@ -269,6 +270,11 @@ export function TrajectorySearch({
                   {badgeKey && (
                     <span style={{ flexShrink: 0, padding: "0 4px", border: "1px solid var(--border)", borderRadius: 3, color: "var(--text-dim)", fontSize: 10 }}>
                       {t(badgeKey)}
+                    </span>
+                  )}
+                  {match.record.status === "error" && (
+                    <span style={{ flexShrink: 0, padding: "0 4px", border: "1px solid var(--trajectory-error)", borderRadius: 3, color: "var(--trajectory-error)", fontSize: 10 }}>
+                      {t("trajectory.errorStatus")}
                     </span>
                   )}
                   <span style={{ flexShrink: 0, marginLeft: "auto", color: "var(--text-dim)", fontSize: 10 }}>

@@ -112,7 +112,10 @@ instead of replaying intermediate scroll adjustments. Space keeps its select/des
 controls have translated labels, and loading, error, empty, and no-details
 states are explicit. Role colors use separate theme tokens for user, assistant,
 thinking, tool, bash, and metadata records; status text/markers remain
-independent so color is never the only semantic signal. Layout is verified at
+independent so color is never the only semantic signal. Failed records (tool
+errors, provider errors, non-zero exits) override the role color with the error
+token, tint the row, repeat the error text, and mark the owning turn in the
+overview. Layout is verified at
 320, 768, 1024, and 1440px.
 
 ## Project structure
