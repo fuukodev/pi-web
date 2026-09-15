@@ -1319,6 +1319,46 @@ export function AppShell() {
         <button
           type="button"
           onClick={() => {
+            if (!selectedSession) return;
+            setChatViewMode((mode) => mode === "chat" ? "trajectory" : "chat");
+            if (mobile && isNarrowMobile) setMobileToolbarMoreOpen(true);
+          }}
+          disabled={!selectedSession}
+          title={translate("trajectory.label")}
+          aria-label={translate("trajectory.label")}
+          aria-pressed={chatViewMode === "trajectory"}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            width: mobile ? TOP_BAR_ICON_BUTTON_SIZE : undefined,
+            height: "100%", padding: mobile ? 0 : "0 12px",
+            background: chatViewMode === "trajectory" ? "var(--bg-selected)" : "none",
+            border: "none", borderTop: chatViewMode === "trajectory" ? "2px solid var(--accent)" : "2px solid transparent",
+            borderRight: "1px solid var(--border)",
+            color: selectedSession ? (chatViewMode === "trajectory" ? "var(--text)" : "var(--text-muted)") : "var(--text-dim)",
+            cursor: selectedSession ? "pointer" : "not-allowed",
+            opacity: selectedSession ? 1 : 0.45,
+            flexShrink: 0, fontSize: 11, whiteSpace: "nowrap",
+            transition: "color 0.1s, background 0.1s, opacity 0.1s",
+          }}
+          onMouseEnter={(event) => {
+            if (selectedSession) event.currentTarget.style.color = "var(--text)";
+          }}
+          onMouseLeave={(event) => {
+            event.currentTarget.style.color = selectedSession
+              ? (chatViewMode === "trajectory" ? "var(--text)" : "var(--text-muted)")
+              : "var(--text-dim)";
+          }}
+          data-mobile-toolbar-action={mobile ? "trajectory" : undefined}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 18h16M4 12h10M4 6h16" />
+            <circle cx="18" cy="12" r="2" />
+          </svg>
+          {!mobile && <span>{translate("trajectory.label")}</span>}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
             handleViewFullHistory();
             if (mobile && isNarrowMobile) setMobileToolbarMoreOpen(true);
           }}
@@ -1376,46 +1416,6 @@ export function AppShell() {
             <path d="M12 7v5l3 2" />
           </svg>
           {!mobile && <span>{translate("history.label")}</span>}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (!selectedSession) return;
-            setChatViewMode((mode) => mode === "chat" ? "trajectory" : "chat");
-            if (mobile && isNarrowMobile) setMobileToolbarMoreOpen(true);
-          }}
-          disabled={!selectedSession}
-          title={translate("trajectory.label")}
-          aria-label={translate("trajectory.label")}
-          aria-pressed={chatViewMode === "trajectory"}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-            width: mobile ? TOP_BAR_ICON_BUTTON_SIZE : undefined,
-            height: "100%", padding: mobile ? 0 : "0 12px",
-            background: chatViewMode === "trajectory" ? "var(--bg-selected)" : "none",
-            border: "none", borderTop: chatViewMode === "trajectory" ? "2px solid var(--accent)" : "2px solid transparent",
-            borderRight: "1px solid var(--border)",
-            color: selectedSession ? (chatViewMode === "trajectory" ? "var(--text)" : "var(--text-muted)") : "var(--text-dim)",
-            cursor: selectedSession ? "pointer" : "not-allowed",
-            opacity: selectedSession ? 1 : 0.45,
-            flexShrink: 0, fontSize: 11, whiteSpace: "nowrap",
-            transition: "color 0.1s, background 0.1s, opacity 0.1s",
-          }}
-          onMouseEnter={(event) => {
-            if (selectedSession) event.currentTarget.style.color = "var(--text)";
-          }}
-          onMouseLeave={(event) => {
-            event.currentTarget.style.color = selectedSession
-              ? (chatViewMode === "trajectory" ? "var(--text)" : "var(--text-muted)")
-              : "var(--text-dim)";
-          }}
-          data-mobile-toolbar-action={mobile ? "trajectory" : undefined}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M4 18h16M4 12h10M4 6h16" />
-            <circle cx="18" cy="12" r="2" />
-          </svg>
-          {!mobile && <span>{translate("trajectory.label")}</span>}
         </button>
         {(() => {
           // 上下文压缩后当前消息可能不再包含 user 消息，需同时参考会话文件的消息总数。

@@ -19,9 +19,17 @@ test("uses a compact narrow-mobile toolbar with a floating action layer", () => 
     /data-mobile-toolbar-actions="true"[\s\S]*?position: "absolute"[\s\S]*?right: 0,[\s\S]*?left: TOP_BAR_ICON_BUTTON_SIZE/,
   );
 
-  for (const action of ["history", "name", "agents", "branches", "system", "tools"]) {
+  for (const action of ["trajectory", "history", "name", "agents", "branches", "system", "tools"]) {
     assert.match(source, new RegExp(`data-mobile-toolbar-action=(?:\\{mobile \\? )?"${action}"`));
   }
+});
+
+test("places Trajectory immediately to the left of Full history", () => {
+  const trajectoryIndex = source.indexOf('data-mobile-toolbar-action={mobile ? "trajectory" : undefined}');
+  const historyIndex = source.indexOf('data-mobile-toolbar-action={mobile ? "history" : undefined}');
+  assert.ok(trajectoryIndex >= 0);
+  assert.ok(historyIndex >= 0);
+  assert.ok(trajectoryIndex < historyIndex);
 });
 
 test("only renders the Agents switcher when the active session family has subagents", () => {
