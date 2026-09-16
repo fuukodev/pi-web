@@ -59,7 +59,7 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
   const isMobile = useIsMobile();
   const trajectory = useTrajectory({ ...props, liveLoadingLabel: t("trajectory.liveLoading") });
   const ledgerScrollRef = useRef<HTMLDivElement>(null);
-  const liveRunActiveRef = useRef(false);
+  const liveRunActiveRef = useRef<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [pendingScrollRecordId, setPendingScrollRecordId] = useState<string | null>(null);
   const search = useTrajectorySearch({
@@ -74,15 +74,16 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
   }, [props.enabled]);
 
   useEffect(() => {
-    const liveActive = trajectory.liveRecords.length > 0;
-    if (props.enabled && liveActive && !liveRunActiveRef.current) {
+    const liveUser = trajectory.liveRecords.find((record) => record.kind === "user");
+    const liveKey = trajectory.liveRecords.length === 0 ? null : liveUser?.preview ?? "active";
+    if (props.enabled && liveKey && liveKey !== liveRunActiveRef.current) {
       requestAnimationFrame(() => {
         const container = ledgerScrollRef.current;
         if (container) container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
       });
     }
-    liveRunActiveRef.current = liveActive;
-  }, [props.enabled, trajectory.liveRecords.length]);
+    liveRunActiveRef.current = liveKey;
+  }, [props.enabled, trajectory.liveRecords]);
 
   // The anchored page renders after `ensureTurnLoaded` resolves; waiting on the
   // page state keeps the scroll target stable after the new turns commit.
