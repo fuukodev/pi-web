@@ -101,21 +101,27 @@ text and results. Selecting a result selects the record and scrolls the
 ledger, fetching an anchored page when the turn is not loaded; a `Jump to
 latest` control restores the tail window in that case.
 
-Every record is keyboard focusable/selectable. Enter on an already-selected
+Every record is keyboard focusable/selectable. The inspector header exposes an
+icon-only Copy control immediately before Open in chat and Close. Copy uses the
+bounded detail DTO already loaded by the inspector: user and assistant records
+copy text blocks, thinking records copy thinking blocks, and tool records copy
+a stable `toolName(arguments)` command followed by an `--- output ---` or
+`--- error ---` section. Images and binary data remain metadata placeholders
+and are never copied as base64. Enter on an already-selected
 record jumps to its chat position, as does the inspector's icon button to the
 left of close; the jump switches back to chat, loads bounded older pages until
 the entry is present (up to 10 pages of 200 entries), scrolls instantly to the
 exact tool call block when one is known, and shows a dismissible notice when
 the position cannot be located. While those pages load the transcript stays
 hidden behind a locating status, so the final position appears directly
-instead of replaying intermediate scroll adjustments. Space keeps its select/deselect behavior. All icon-only
-controls have translated labels, and loading, error, empty, and no-details
-states are explicit. Role colors use separate theme tokens for user, assistant,
-thinking, tool, bash, and metadata records; status text/markers remain
-independent so color is never the only semantic signal. Failed records (tool
-errors, provider errors, non-zero exits) override the role color with the error
-token, tint the row, repeat the error text, and mark the owning turn in the
-overview. Layout is verified at
+instead of replaying intermediate scroll adjustments. Space keeps its
+select/deselect behavior. All icon-only controls have translated labels, and
+loading, error, empty, no-details, and copy-failure states are explicit. Role
+colors use separate theme tokens for user, assistant, thinking, tool, bash, and
+metadata records; status text/markers remain independent so color is never the
+only semantic signal. Failed records (tool errors, provider errors, non-zero
+exits) override the role color with the error token, tint the row, repeat the
+error text, and mark the owning turn in the overview. Layout is verified at
 320, 768, 1024, and 1440px.
 
 ## Project structure
