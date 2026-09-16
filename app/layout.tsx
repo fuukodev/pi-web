@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_Mono } from "next/font/google";
 import { PwaRegistration } from "@/components/PwaRegistration";
+import { DEV_SW_RESET_SCRIPT } from "@/lib/dev-service-worker";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "katex/dist/katex.min.css";
 import "./globals.css";
@@ -68,6 +69,15 @@ export default function RootLayout({
             __html: THEME_INIT_SCRIPT,
           }}
         />
+        {/* Inline while the document parses: dev must not keep a production
+            worker's cache-first `/_next/static/*` entries. See lib/dev-service-worker.ts. */}
+        {process.env.NODE_ENV === "development" && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: DEV_SW_RESET_SCRIPT,
+            }}
+          />
+        )}
       </head>
       <body translate="no" className="notranslate" suppressHydrationWarning>
         {children}
