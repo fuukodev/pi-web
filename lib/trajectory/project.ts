@@ -1,5 +1,4 @@
 import type {
-  AgentMessage,
   AssistantMessage,
   SessionEntry,
   ToolResultMessage,
@@ -7,7 +6,6 @@ import type {
 import { formatToolCallPreview } from "./tool-preview";
 import { trajectoryTurnStatus } from "./runs";
 import type {
-  TrajectoryDurationSource,
   TrajectoryProjection,
   TrajectoryRecord,
   TrajectoryRecordKind,
@@ -126,7 +124,9 @@ function finalizeTurn(turn: MutableTurn): TrajectoryTurn {
   const durationMs = turn.firstTimestamp !== undefined && turn.lastTimestamp !== undefined
     ? Math.max(0, turn.lastTimestamp - turn.firstTimestamp)
     : undefined;
-  const { firstTimestamp: _firstTimestamp, lastTimestamp: _lastTimestamp, ...result } = turn;
+  const result = { ...turn };
+  delete result.firstTimestamp;
+  delete result.lastTimestamp;
   const finalStatus = turn.records.length > 0 ? trajectoryTurnStatus(turn.records) : undefined;
   return {
     ...result,

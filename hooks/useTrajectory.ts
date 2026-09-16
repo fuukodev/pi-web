@@ -119,7 +119,7 @@ export function useTrajectory({
     }
   }, [activeLeafId, enabled, sessionId]);
 
-  const reload = useCallback(async ({ preserveView = false }: { preserveView?: boolean } = {}) => {
+  const reload = useCallback(async ({ preserveView = false, latest = false }: { preserveView?: boolean; latest?: boolean } = {}) => {
     if (!enabled || !sessionId) return;
     setLoading(true);
     setError(null);
@@ -129,7 +129,7 @@ export function useTrajectory({
       setDetail(null);
     }
     try {
-      const anchor = preserveView ? pageRef.current?.turns.at(-1)?.id : null;
+      const anchor = preserveView && !latest ? pageRef.current?.turns.at(-1)?.id : null;
       const next = await fetchPage(null, anchor);
       if (next) {
         setPage(next);
@@ -273,7 +273,7 @@ export function useTrajectory({
   }, [busy]);
 
   useEffect(() => {
-    if (wasBusyRef.current && !busy && enabled && sessionId) void reload({ preserveView: true });
+    if (wasBusyRef.current && !busy && enabled && sessionId) void reload({ preserveView: true, latest: true });
     wasBusyRef.current = busy;
   }, [busy, enabled, reload, sessionId]);
 

@@ -171,7 +171,11 @@ function candidatesFor(record: TrajectoryRecord, entry: SessionEntry | undefined
     return block?.type === "text" ? [{ field: "text", text: collapse(block.text) }] : [];
   }
   if (record.kind === "thinking") {
-    return message.role === "assistant" ? [{ field: "thinking", text: collapse(textFromBlocks(message.content, "thinking")) }] : [];
+    if (message.role !== "assistant") return [];
+    const block = record.blockIndex !== undefined && Array.isArray(message.content)
+      ? message.content[record.blockIndex]
+      : undefined;
+    return block?.type === "thinking" ? [{ field: "thinking", text: collapse(block.thinking) }] : [];
   }
   if (record.kind === "tool") {
     if (message.role === "assistant") {

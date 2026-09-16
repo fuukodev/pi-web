@@ -84,7 +84,7 @@ export function buildLiveTrajectoryRecords({
   loadingLabel = "Loading…",
 }: BuildLiveTrajectoryRecordsOptions): TrajectoryRecord[] {
   const records: TrajectoryRecord[] = [];
-  const active = agentRunning || bashRunning || isCompacting || streamState.isStreaming || Boolean(runError);
+  const active = agentRunning || bashRunning || isCompacting || streamState.isStreaming;
   if (!active) return [];
 
   if (liveUserMessage) {

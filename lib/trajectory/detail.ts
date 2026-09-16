@@ -1,6 +1,5 @@
 import type {
   AgentMessage,
-  AssistantContentBlock,
   SessionEntry,
   ToolResultMessage,
 } from "../types";
