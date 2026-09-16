@@ -47,6 +47,16 @@ const nextConfig: NextConfig = {
     "172.31.*.*",
     "192.168.*.*",
   ],
+  // Dev serves a self-unregistering `/sw.js` so a production worker left on the
+  // same origin cannot keep serving cached `/_next/static/*` chunks after HMR.
+  // The rewrite lives here (not in lib/dev-service-worker.ts) to keep this config
+  // loadable as plain Node ESM without a TypeScript-extension import. `beforeFiles`
+  // is required: `public/sw.js` would win an `afterFiles` rewrite.
+  async rewrites() {
+    return process.env.NODE_ENV === "development"
+      ? { beforeFiles: [{ source: "/sw.js", destination: "/api/dev-sw" }] }
+      : [];
+  },
   async headers() {
     return [
       {

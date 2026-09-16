@@ -38,7 +38,13 @@ test("renders extension confirmation and options as markdown", () => {
 test("preserves title newlines like pi's TUI and keeps long titles from hiding the body", () => {
   const header = dialogSource.slice(dialogSource.indexOf('role="dialog"'), dialogSource.indexOf("{request.method === \"confirm\""));
   assert.match(header, /whiteSpace: "pre-wrap", overflowWrap: "anywhere" \}\}>\{request\.title\}/);
-  assert.match(header, /maxHeight: "50%", overflowY: "auto" \}\}>[\s\S]*?\{request\.title\}/);
+  assert.match(header, /maxHeight: "min\(320px, 40vh\)", overflowY: "auto" \}\}>[\s\S]*?\{request\.title\}/);
+  // The dialog is a column flex container with `height: auto`, so a percentage max-height
+  // resolves to `none`. With flexShrink 0 the title then kept its full intrinsic height, the
+  // shrinkable options body absorbed the whole deficit, and the dialog's own `overflow: hidden`
+  // clipped both the title and the footer. The cap must resolve against a definite length.
+  assert.doesNotMatch(header, /maxHeight: "\d+(\.\d+)?%"/);
+  assert.match(dialogSource, /flex: "1 1 auto", minHeight: 0, overflowY: "auto"/);
 });
 
 test("resets collapse state when a new extension request arrives", () => {
