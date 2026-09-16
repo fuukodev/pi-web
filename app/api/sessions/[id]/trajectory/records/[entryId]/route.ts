@@ -60,7 +60,19 @@ export async function GET(
       return NextResponse.json({ error: "Trajectory record not found" }, { status: 404 });
     }
 
-    const detail = buildTrajectoryRecordDetail(branch, entryId, toolCallId, recordId);
+    let toolSchema: unknown;
+    if (liveRpc && toolCallId) {
+      const toolBlock = branch
+        .filter((entry): entry is Extract<SessionEntry, { type: "message" }> => entry.type === "message" && entry.message.role === "assistant")
+        .flatMap((entry) => entry.message.role === "assistant" && Array.isArray(entry.message.content) ? entry.message.content : [])
+        .find((block) => block.type === "toolCall" && (block.toolCallId === toolCallId || (block as unknown as { id?: string }).id === toolCallId));
+      const rawToolBlock = toolBlock as unknown as { toolName?: string; name?: string } | undefined;
+      const toolName = rawToolBlock?.toolName ?? rawToolBlock?.name;
+      if (toolName) {
+        toolSchema = liveRpc.inner.getAllTools().find((tool) => tool.name === toolName)?.parameters;
+      }
+    }
+    const detail = buildTrajectoryRecordDetail(branch, entryId, toolCallId, recordId, toolSchema);
     return NextResponse.json(detail, {
       headers: { "Cache-Control": "no-store" },
     });

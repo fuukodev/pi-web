@@ -282,7 +282,7 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
 
   const {
     loading, error, messages, activeToolResults, entryIds, historyCursor, hasEarlierMessages, streamState,
-    agentRunning, bashRunning, pendingBash, modelNames, modelList, modelError, modelScopeWarnings, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
+    agentRunning, runError, bashRunning, pendingBash, modelNames, modelList, modelError, modelScopeWarnings, modelThinkingLevels, modelThinkingLevelMaps, toolPreset, thinkingLevel,
     retryInfo, contextUsage, forkingEntryId,
     isCompacting, compactError, compactResult, displayModel: displayModelValue, modelSwitching, sessionStats,
     slashCommands, slashCommandsLoading, queuedMessages,
@@ -304,6 +304,13 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
     deferInitialScroll: Boolean(pendingScrollRestore),
   });
   const sessionBusy = agentRunning || bashRunning;
+  const liveUserMessage = useMemo(() => {
+    if (!agentRunning) return null;
+    const message = [...messages].reverse().find((candidate) => candidate.role === "user");
+    if (!message || message.role !== "user") return null;
+    if (typeof message.content === "string") return message.content;
+    return message.content.filter((block) => block.type === "text").map((block) => block.text).join("\n") || "[image]";
+  }, [agentRunning, messages]);
   const [quotedSelection, setQuotedSelection] = useState<{
     text: string;
     top: number;
@@ -1064,6 +1071,9 @@ export function ChatWindow({ session, viewMode = "chat", searchTarget, onSearchT
           isCompacting={isCompacting}
           agentPhase={agentPhase}
           streamState={streamState}
+          activeToolResults={activeToolResults}
+          liveUserMessage={liveUserMessage}
+          runError={runError}
           onJumpToChat={onJumpToChat}
         />
         {viewMode === "trajectory" ? null : <>

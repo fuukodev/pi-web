@@ -24,12 +24,35 @@ test("trajectory pane fills the available chat panel", () => {
   assert.match(pane, /display: "flex", flexDirection: "column", flex: 1, minWidth: 0/);
 });
 
+test("live runs append the user and auto-scroll only when live starts", () => {
+  assert.match(pane, /liveRunActiveRef/);
+  assert.match(pane, /scrollHeight/);
+  assert.match(pane, /behavior: "smooth"/);
+  assert.match(pane, /liveUserMessage/);
+  assert.match(pane, /runError/);
+});
+
 test("trajectory ledger makes records keyboard-selectable and supports earlier pages", () => {
   assert.match(ledger, /<button/);
   assert.match(ledger, /aria-pressed/);
   assert.match(ledger, /onKeyDown/);
   assert.match(ledger, /loadEarlier/);
   assert.match(ledger, /data-trajectory-record/);
+});
+
+test("trajectory ledger groups collapsible agent runs and hides child records", () => {
+  assert.match(ledger, /groupTrajectoryRuns/);
+  assert.match(ledger, /aria-expanded/);
+  assert.match(ledger, /collapsedRunIds/);
+  assert.match(ledger, /group\.records/);
+});
+
+test("trajectory records use one-line kind and preview rows with spaced tool signatures", () => {
+  assert.match(ledger, /record\.preview/);
+  assert.doesNotMatch(ledger, /record\.summary\}/);
+  assert.match(ledger, /whiteSpace: "nowrap"/);
+  assert.match(ledger, /record\.status === "error" && record\.error/);
+  assert.match(ledger, /gap: [45]/);
 });
 
 test("only inspectable persisted records open the inspector and repeated clicks close it", () => {
@@ -60,7 +83,7 @@ test("trajectory records expose role colors separately from status colors", () =
   assert.match(ledger, /data-trajectory-kind=\{record\.kind\}/);
   assert.match(ledger, /var\(--trajectory-kind-color/);
   assert.match(inspector, /data-trajectory-kind=\{record\.kind\}/);
-  for (const token of ["--trajectory-user", "--trajectory-assistant", "--trajectory-thinking", "--trajectory-tool", "--trajectory-bash", "--trajectory-meta"]) {
+  for (const token of ["--trajectory-user", "--trajectory-assistant", "--trajectory-thinking", "--trajectory-text", "--trajectory-tool", "--trajectory-bash", "--trajectory-meta"]) {
     assert.match(globals, new RegExp(token));
   }
 });
@@ -144,6 +167,12 @@ test("enter on the selected record jumps to chat while space keeps selecting", (
   assert.match(pane, /jumpToChat\(trajectory\.selectedRecord\)/);
 });
 
+test("overview uses the final agent run status rather than any intermediate error", () => {
+  assert.match(overview, /trajectoryTurnStatus/);
+  assert.match(overview, /finalStatus/);
+  assert.doesNotMatch(overview, /turn\.records\.some\(\(record\) => record\.status === "error"\)/);
+});
+
 test("failed records are marked red across the ledger, search, and inspector", () => {
   assert.match(ledger, /data-trajectory-status=\{record\.status\}/);
   assert.match(ledger, /record\.status === "error" \? "var\(--trajectory-error-bg\)" : "transparent"/);
@@ -158,11 +187,16 @@ test("failed records are marked red across the ledger, search, and inspector", (
   assert.match(globals, /\[data-trajectory-status="error"\] \{ --trajectory-kind-color: var\(--trajectory-error\); \}/);
 });
 
-test("inspector renders bounded JSON as text and links to Full History", () => {
+test("inspector renders record-specific payload and tool-only sections", () => {
   assert.match(inspector, /JSON\.stringify/);
   assert.match(inspector, /whiteSpace: "pre-wrap"/);
-  assert.match(inspector, /trajectory\.payload/);
-  assert.match(inspector, /trajectory\.result/);
+  assert.match(inspector, /detail\.payload/);
+  assert.match(inspector, /trajectory\.message/);
+  assert.match(inspector, /trajectory\.command/);
+  assert.match(inspector, /record\.kind === "tool"/);
+  assert.match(inspector, /detail\.schema/);
+  assert.match(inspector, /detail\.timing/);
+  assert.doesNotMatch(inspector, /<div style=\{\{ marginTop: 4[\s\S]*trajectory\.\$\{record\.kind/);
   assert.match(inspector, /\/api\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/export/);
   assert.match(inspector, /targetId/);
 });

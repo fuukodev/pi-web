@@ -1,6 +1,7 @@
 "use client";
 
 import type { TrajectoryRecord, TrajectoryTurn } from "@/lib/trajectory/types";
+import { trajectoryTurnStatus } from "@/lib/trajectory/runs";
 import { useI18n } from "@/hooks/useI18n";
 
 interface Props {
@@ -19,10 +20,7 @@ function statusColor(status: TrajectoryRecord["status"]): string {
 }
 
 function turnStatus(turn: TrajectoryTurn): TrajectoryRecord["status"] {
-  if (turn.records.some((record) => record.status === "error")) return "error";
-  if (turn.records.some((record) => record.status === "running")) return "running";
-  if (turn.records.some((record) => record.status === "unknown")) return "unknown";
-  return "complete";
+  return turn.finalStatus ?? trajectoryTurnStatus(turn.records);
 }
 
 export function TrajectoryOverview({ turns, liveRecords, selectedId, onSelectTurn, onSelectLive }: Props) {
@@ -50,7 +48,7 @@ export function TrajectoryOverview({ turns, liveRecords, selectedId, onSelectTur
           {t("trajectory.turnCount", { count: turns.length })}
         </span>
       </div>
-      <div role="list" aria-label={t("trajectory.overview")} style={{ display: "flex", gap: 4, overflowX: "auto", paddingTop: 9, minHeight: 28 }}>
+      <div role="list" aria-label={t("trajectory.overview")} style={{ display: "flex", alignItems: "stretch", gap: 4, overflowX: "auto", paddingTop: 9, minHeight: 28 }}>
         {turns.map((turn, index) => {
           const status = turnStatus(turn);
           const selected = turn.records.some((record) => record.id === selectedId);
@@ -84,26 +82,28 @@ export function TrajectoryOverview({ turns, liveRecords, selectedId, onSelectTur
           );
         })}
         {liveTurn && (
-          <div role="listitem" style={{ flex: "0 0 auto" }}>
+          <div role="listitem" style={{ flex: "0 0 auto", display: "flex" }}>
             <button
               type="button"
               aria-label={t("trajectory.live")}
-            aria-pressed={liveRecords.some((record) => record.id === selectedId)}
-            onClick={onSelectLive}
+              aria-pressed={liveRecords.some((record) => record.id === selectedId)}
+              onClick={onSelectLive}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 4,
+                minWidth: 30,
                 height: 24,
-              padding: "0 7px",
-              border: "1px solid var(--accent)",
-              borderRadius: 4,
-              background: "var(--bg-selected)",
-              color: "var(--accent)",
-              cursor: "pointer",
-              fontSize: 11,
-              fontWeight: 600,
-            }}
+                padding: "0 6px",
+                border: "1px solid var(--accent)",
+                borderRadius: 4,
+                background: "var(--bg-selected)",
+                color: "var(--accent)",
+                cursor: "pointer",
+                fontSize: 11,
+                fontWeight: 600,
+              }}
             >
               <span aria-hidden="true" style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--accent)" }} />
               {t("trajectory.live")}

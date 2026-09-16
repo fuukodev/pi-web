@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { StreamingState } from "@/lib/streaming-message";
-import type { SessionInfo } from "@/lib/types";
+import type { SessionInfo, ToolResultMessage } from "@/lib/types";
 import {
   buildLiveTrajectoryRecords,
   type LiveTrajectoryPhase,
@@ -30,6 +30,10 @@ export interface UseTrajectoryOptions {
   isCompacting: boolean;
   agentPhase: AgentPhase;
   streamState: StreamingState;
+  activeToolResults: ReadonlyMap<string, ToolResultMessage>;
+  liveUserMessage?: string | null;
+  runError?: string | null;
+  liveLoadingLabel?: string;
 }
 
 export interface UseTrajectoryResult {
@@ -38,7 +42,7 @@ export interface UseTrajectoryResult {
   loadingEarlier: boolean;
   error: string | null;
   loadEarlier: () => Promise<void>;
-  reload: () => Promise<void>;
+  reload: (options?: { preserveView?: boolean }) => Promise<void>;
   ensureTurnLoaded: (turnId: string) => Promise<boolean>;
   liveRecords: TrajectoryRecord[];
   selectedRecord: TrajectoryRecord | null;
@@ -64,6 +68,10 @@ export function useTrajectory({
   isCompacting,
   agentPhase,
   streamState,
+  activeToolResults,
+  liveUserMessage,
+  runError,
+  liveLoadingLabel,
 }: UseTrajectoryOptions): UseTrajectoryResult {
   const sessionId = session?.id ?? null;
   const requestControllerRef = useRef<AbortController | null>(null);
@@ -79,12 +87,14 @@ export function useTrajectory({
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<TrajectoryRecord | null>(null);
+  const selectedRecordRef = useRef<TrajectoryRecord | null>(null);
   const [detail, setDetail] = useState<TrajectoryRecordDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [liveNow, setLiveNow] = useState(() => Date.now());
 
   pageRef.current = page;
+  selectedRecordRef.current = selectedRecord;
 
   const fetchPage = useCallback(async (cursor?: string | null, anchor?: string | null): Promise<TrajectoryPage | null> => {
     if (!enabled || !sessionId) return null;
@@ -109,16 +119,25 @@ export function useTrajectory({
     }
   }, [activeLeafId, enabled, sessionId]);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async ({ preserveView = false }: { preserveView?: boolean } = {}) => {
     if (!enabled || !sessionId) return;
     setLoading(true);
     setError(null);
-    setPage(null);
-    setSelectedRecord(null);
-    setDetail(null);
+    if (!preserveView) {
+      setPage(null);
+      setSelectedRecord(null);
+      setDetail(null);
+    }
     try {
-      const next = await fetchPage();
-      if (next) setPage(next);
+      const anchor = preserveView ? pageRef.current?.turns.at(-1)?.id : null;
+      const next = await fetchPage(null, anchor);
+      if (next) {
+        setPage(next);
+        if (preserveView && selectedRecordRef.current && !next.records.some((record) => record.id === selectedRecordRef.current?.id)) {
+          setSelectedRecord(null);
+          setDetail(null);
+        }
+      }
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -254,7 +273,7 @@ export function useTrajectory({
   }, [busy]);
 
   useEffect(() => {
-    if (wasBusyRef.current && !busy && enabled && sessionId) void reload();
+    if (wasBusyRef.current && !busy && enabled && sessionId) void reload({ preserveView: true });
     wasBusyRef.current = busy;
   }, [busy, enabled, reload, sessionId]);
 
@@ -267,7 +286,11 @@ export function useTrajectory({
     isCompacting,
     agentPhase: agentPhase as LiveTrajectoryPhase | null,
     streamState,
-  }), [agentPhase, agentRunning, bashRunning, isCompacting, liveNow, pendingBash, streamState]);
+    activeToolResults,
+    liveUserMessage,
+    runError,
+    loadingLabel: liveLoadingLabel,
+  }), [activeToolResults, agentPhase, agentRunning, bashRunning, isCompacting, liveLoadingLabel, liveNow, liveUserMessage, pendingBash, runError, streamState]);
 
   useEffect(() => () => {
     requestControllerRef.current?.abort();
