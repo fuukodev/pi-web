@@ -55,6 +55,14 @@ test("trajectory records use one-line kind and preview rows with spaced tool sig
   assert.match(ledger, /gap: [45]/);
 });
 
+test("assistant roots keep only the expand icon and child records stay aligned", () => {
+  assert.match(ledger, /showKindMarker/);
+  assert.match(ledger, /showKindMarker &&/);
+  assert.match(ledger, /boxShadow: selected && showKindMarker/);
+  assert.match(ledger, /group\.records\.slice\(1\)\.map/);
+  assert.doesNotMatch(ledger, /marginLeft: 20, paddingLeft: 7, borderLeft: "1px solid var\(--border\)"/);
+});
+
 test("only inspectable persisted records open the inspector and repeated clicks close it", () => {
   assert.match(pane, /isInspectableTrajectoryRecord/);
   assert.match(pane, /selectedRecord\?\.id === record\.id/);

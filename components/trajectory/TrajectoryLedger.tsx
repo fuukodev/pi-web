@@ -59,12 +59,13 @@ function statusColor(status: TrajectoryRecord["status"]): string {
   return "var(--text-muted)";
 }
 
-function RecordButton({ record, selectedId, onSelect, onJump, t }: {
+function RecordButton({ record, selectedId, onSelect, onJump, t, showKindMarker = true }: {
   record: TrajectoryRecord;
   selectedId: string | null;
   onSelect: (record: TrajectoryRecord) => void;
   onJump?: (record: TrajectoryRecord) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
+  showKindMarker?: boolean;
 }) {
   const selected = selectedId === record.id;
   const duration = formatDuration(record.durationMs);
@@ -99,7 +100,7 @@ function RecordButton({ record, selectedId, onSelect, onJump, t }: {
       }}
       style={{
         display: "grid",
-        gridTemplateColumns: "7px minmax(0, 1fr) auto",
+        gridTemplateColumns: showKindMarker ? "7px minmax(0, 1fr) auto" : "minmax(0, 1fr) auto",
         gap: 9,
         alignItems: "center",
         width: "100%",
@@ -108,13 +109,13 @@ function RecordButton({ record, selectedId, onSelect, onJump, t }: {
         border: `1px solid ${selected ? "var(--trajectory-kind-color, var(--accent))" : "transparent"}`,
         borderRadius: 5,
         background: selected ? "var(--bg-selected)" : record.status === "error" ? "var(--trajectory-error-bg)" : "transparent",
-        boxShadow: selected ? "inset 3px 0 var(--trajectory-kind-color, var(--accent))" : "none",
+        boxShadow: selected && showKindMarker ? "inset 3px 0 var(--trajectory-kind-color, var(--accent))" : "none",
         color: "var(--text)",
         cursor: "pointer",
         textAlign: "left",
       }}
     >
-      <span aria-hidden="true" style={{ width: 4, minHeight: 20, alignSelf: "stretch", borderRadius: 2, background: "var(--trajectory-kind-color, var(--text-muted))" }} />
+      {showKindMarker && <span aria-hidden="true" style={{ width: 4, minHeight: 20, alignSelf: "stretch", borderRadius: 2, background: "var(--trajectory-kind-color, var(--text-muted))" }} />}
       <span style={{ minWidth: 0 }}>
         <span style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0, lineHeight: 1.35 }}>
           <span style={{ color: "var(--trajectory-kind-color, var(--text-muted))", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", flexShrink: 0 }}>
@@ -162,10 +163,10 @@ function RunGroup({ group, collapsed, onToggle, selectedId, onSelect, onJump, t 
         >
           {collapsed ? "▸" : "▾"}
         </button>
-        <RecordButton record={root} selectedId={selectedId} onSelect={onSelect} onJump={onJump} t={t} />
+        <RecordButton record={root} selectedId={selectedId} onSelect={onSelect} onJump={onJump} t={t} showKindMarker={false} />
       </div>
       {!collapsed && group.records.length > 1 && (
-        <div style={{ marginLeft: 20, paddingLeft: 7, borderLeft: "1px solid var(--border)", display: "grid", gap: 5 }}>
+        <div style={{ display: "grid", gap: 5 }}>
           {group.records.slice(1).map((record) => (
             <RecordButton key={record.id} record={record} selectedId={selectedId} onSelect={onSelect} onJump={onJump} t={t} />
           ))}
