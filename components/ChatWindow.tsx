@@ -1664,7 +1664,7 @@ function ExtensionDialog({
             height auto, so a percentage max-height (previously "50%") resolves to none. With
             flexShrink 0 the header then kept its full intrinsic height, and the shrinkable
             options body absorbed the whole deficit, clipping both the title and the footer. */}
-        <div style={{ flexShrink: 0, display: "flex", alignItems: "flex-start", gap: 8, padding: "12px 14px", borderBottom: "1px solid var(--border)", maxHeight: "min(320px, calc(var(--app-viewport-height, 100dvh) * 0.4))", overflowY: "auto" }}>
+        <div style={{ flexShrink: 0, display: "flex", alignItems: "flex-start", gap: 8, padding: "12px 14px", borderBottom: "1px solid var(--border)", maxHeight: "min(320px, 40vh)", overflowY: "auto" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* Pi's TUI shows the title verbatim, newlines included; select/input have no
                 separate message field, so extensions put multi-line text here. */}
