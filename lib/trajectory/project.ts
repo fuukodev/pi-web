@@ -199,6 +199,8 @@ function projectAssistant(
   record.agentRunId = record.id;
   pushRecord(turn, record);
 
+  let lastToolResultMs: number | undefined;
+  const assistantTimestamp = validTimestamp(entry.timestamp);
   for (const [blockIndex, block] of blocks.entries()) {
     if (isRecord(block) && block.type === "thinking") {
       const thinkingRecord = createRecordBase(turn, entry, "thinking", `thinking:${entry.id}${blockIndex === 0 ? "" : `:${blockIndex}`}`);
@@ -248,6 +250,10 @@ function projectAssistant(
       toolRecord.error = resultMessage?.isError ? toolRecord.resultPreview ?? "Tool execution failed" : undefined;
       toolRecord.usage = resultMessage?.usage;
       const durationMs = durationBetween(entry.timestamp, result.entry.timestamp);
+      const resultTimestamp = validTimestamp(result.entry.timestamp);
+      if (resultTimestamp && (lastToolResultMs === undefined || resultTimestamp.ms > lastToolResultMs)) {
+        lastToolResultMs = resultTimestamp.ms;
+      }
       if (durationMs !== undefined) {
         toolRecord.durationMs = durationMs;
         toolRecord.durationSource = "estimated";
@@ -256,6 +262,11 @@ function projectAssistant(
       toolRecord.status = "unknown";
     }
     pushRecord(turn, toolRecord);
+  }
+
+  if (assistantTimestamp && lastToolResultMs !== undefined && lastToolResultMs >= assistantTimestamp.ms) {
+    record.durationMs = lastToolResultMs - assistantTimestamp.ms;
+    record.durationSource = "estimated";
   }
 }
 
