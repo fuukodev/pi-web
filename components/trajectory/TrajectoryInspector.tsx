@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { TrajectoryRecord } from "@/lib/trajectory/types";
 import type { TrajectoryRecordDetail } from "@/lib/trajectory/detail";
+import { copyText } from "@/lib/clipboard";
+import { buildTrajectoryCopyText } from "@/lib/trajectory/copy";
 import { useI18n } from "@/hooks/useI18n";
 
 interface Props {
@@ -48,6 +51,17 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, loading, error, onClose, onJumpToChat }: Props) {
   const { t } = useI18n();
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setCopyState("idle");
+  }, [record?.id]);
+
+  useEffect(() => () => {
+    if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
+  }, []);
+
   if (!record) {
     return (
       <aside data-trajectory-inspector="true" role="complementary" aria-label={t("trajectory.inspector")} style={{ minWidth: 0, padding: 16, color: "var(--text-dim)", fontSize: 12 }}>
@@ -61,6 +75,18 @@ export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, l
   const historyHref = `/api/sessions/${encodeURIComponent(sessionId)}/export?${params}`;
   const payload = detail?.entry.message?.content ?? detail?.entry.message ?? detail?.entry;
   const result = detail?.result?.message?.content ?? detail?.result;
+  const copyValue = detail ? buildTrajectoryCopyText(record, detail) : null;
+  const copyLabel = copyState === "copied" ? t("trajectory.copySuccess") : t("trajectory.copyRecord");
+  const copyRecord = () => {
+    if (!copyValue) return;
+    void copyText(copyValue).then(() => {
+      setCopyState("copied");
+      if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
+      copyResetTimer.current = setTimeout(() => setCopyState("idle"), 1500);
+    }).catch(() => {
+      setCopyState("error");
+    });
+  };
 
   return (
     <aside data-trajectory-inspector="true" data-trajectory-kind={record.kind} data-trajectory-status={record.status} role="complementary" aria-labelledby="trajectory-inspector-heading" style={{ minWidth: 0, height: "100%", overflow: "auto", padding: 16, borderLeft: "3px solid var(--trajectory-kind-color, var(--border))", background: "var(--bg-panel)" }}>
@@ -70,6 +96,25 @@ export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, l
           <div style={{ marginTop: 4, color: "var(--trajectory-kind-color, var(--text-dim))", fontSize: 11 }}>{t(`trajectory.${record.kind === "branchSummary" ? "branchSummary" : record.kind}`)}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={copyRecord}
+            disabled={!copyValue || loading}
+            aria-label={copyLabel}
+            title={copyLabel}
+            style={{ width: 28, height: 28, display: "grid", placeItems: "center", border: "1px solid var(--border)", borderRadius: 4, background: "transparent", color: copyState === "copied" ? "var(--accent)" : "var(--text-muted)", cursor: copyValue && !loading ? "pointer" : "not-allowed", opacity: copyValue && !loading ? 1 : 0.55 }}
+          >
+            {copyState === "copied" ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            )}
+          </button>
           {onJumpToChat && (
             <button
               type="button"
@@ -90,6 +135,12 @@ export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, l
           )}
         </div>
       </div>
+
+      {copyState === "error" && (
+        <div role="alert" aria-live="polite" style={{ marginTop: 8, color: "var(--trajectory-error)", fontSize: 11 }}>
+          {t("trajectory.copyFailed")}
+        </div>
+      )}
 
       {record.status === "error" && record.error && (
         <div role="alert" style={{ marginTop: 12, padding: "8px 10px", border: "1px solid var(--trajectory-error)", borderRadius: 4, background: "var(--trajectory-error-bg)", color: "var(--trajectory-error)", fontSize: 12, lineHeight: 1.5, overflowWrap: "anywhere" }}>
