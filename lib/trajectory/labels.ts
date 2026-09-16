@@ -5,6 +5,7 @@ export const TRAJECTORY_KIND_LABEL_KEYS: Record<TrajectoryRecord["kind"], string
   user: "trajectory.user",
   assistant: "trajectory.assistant",
   thinking: "trajectory.thinking",
+  text: "trajectory.text",
   tool: "trajectory.tool",
   bash: "trajectory.bash",
   compaction: "trajectory.compaction",
