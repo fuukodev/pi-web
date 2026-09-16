@@ -39,6 +39,9 @@ function imageText(block: DataRecord): string {
 
 function contentText(content: unknown, mode: CopyMode): string {
   if (typeof content === "string") return content;
+  if (isRecord(content) && content.truncated === true && typeof content.value === "string") {
+    return content.value;
+  }
   if (!Array.isArray(content)) return "";
 
   const parts: string[] = [];
