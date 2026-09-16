@@ -119,12 +119,19 @@ test("offers a jump to latest when an anchored page hides newer turns", () => {
   assert.match(pane, /trajectory\.reload\(\)/);
 });
 
-test("inspector offers an icon jump-to-chat button left of close", () => {
+test("inspector offers copy before icon jump-to-chat and close", () => {
+  const copyIndex = inspector.indexOf("aria-label={copyLabel}");
   const jumpIndex = inspector.indexOf('aria-label={t("trajectory.jumpToChat")}');
   const closeIndex = inspector.indexOf('aria-label={t("trajectory.closeInspector")}');
+  assert.ok(copyIndex > 0, "copy formatter missing");
   assert.ok(jumpIndex > 0, "jump button missing");
   assert.ok(closeIndex > 0, "close button missing");
+  assert.ok(copyIndex < jumpIndex, "copy control must precede jump control");
   assert.ok(jumpIndex < closeIndex, "jump button must precede close");
+  assert.match(inspector, /copyText\(copyValue\)/);
+  assert.match(inspector, /disabled=\{!copyValue \|\| loading\}/);
+  assert.match(inspector, /trajectory\.copySuccess/);
+  assert.match(inspector, /trajectory\.copyFailed/);
   assert.match(inspector, /onJumpToChat/);
   assert.match(pane, /jumpToChat/);
   assert.match(pane, /onJumpToChat=\{\(\) => jumpToChat\(inspectorRecord\)\}/);
