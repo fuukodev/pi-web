@@ -1,6 +1,5 @@
 import type {
   AgentMessage,
-  AssistantContentBlock,
   SessionEntry,
   ToolResultMessage,
 } from "../types";
@@ -41,7 +40,11 @@ export interface TrajectoryRecordDetail {
   version: 1;
   record: TrajectoryRecord;
   entry: TrajectoryEntryDetail;
+  /** Payload belonging to the selected record, not the whole source entry. */
+  payload: unknown;
   result?: TrajectoryEntryDetail;
+  schema?: unknown;
+  timing?: { durationMs?: number; durationSource: TrajectoryRecord["durationSource"] };
 }
 
 function boundedString(value: string): string | TruncatedText {
@@ -167,6 +170,34 @@ function messageDetail(message: AgentMessage): Record<string, unknown> {
   }
 }
 
+function selectedPayload(record: TrajectoryRecord, entry: SessionEntry, resultEntry: SessionEntry | undefined): unknown {
+  if (entry.type !== "message") return entryDetail(entry);
+  const message = entry.message;
+  if (record.kind === "tool" && message.role === "toolResult") return messageDetail(message);
+  if (message.role !== "assistant") return messageDetail(message);
+  if (record.kind === "assistant") return messageDetail(message);
+  const block = Array.isArray(message.content) && record.blockIndex !== undefined
+    ? message.content[record.blockIndex]
+    : undefined;
+  if (record.kind === "text" && block?.type === "text") return { type: "text", text: boundedString(block.text) };
+  if (record.kind === "thinking" && block?.type === "thinking") return { type: "thinking", thinking: boundedString(block.thinking) };
+  if (record.kind === "tool") {
+    const toolBlock = block?.type === "toolCall"
+      ? block
+      : message.content.find((candidate) => candidate.type === "toolCall" && (candidate.toolCallId === record.toolCallId || (candidate as unknown as { id?: string }).id === record.toolCallId));
+    if (toolBlock?.type === "toolCall") {
+      const rawToolBlock = toolBlock as unknown as Record<string, unknown>;
+      return {
+        type: "toolCall",
+        id: rawToolBlock.toolCallId ?? rawToolBlock.id,
+        name: rawToolBlock.toolName ?? rawToolBlock.name,
+        input: boundedValue(rawToolBlock.input ?? rawToolBlock.arguments),
+      };
+    }
+  }
+  return resultEntry ? entryDetail(resultEntry) : messageDetail(message);
+}
+
 function entryDetail(entry: SessionEntry): TrajectoryEntryDetail {
   const base = {
     id: entry.id,
@@ -206,6 +237,7 @@ export function buildTrajectoryRecordDetail(
   entryId: string,
   toolCallId?: string | null,
   recordId?: string | null,
+  toolSchema?: unknown,
 ): TrajectoryRecordDetail {
   const projection = projectTrajectory(entries);
   const record = projection.records.find((candidate) => (
@@ -226,6 +258,9 @@ export function buildTrajectoryRecordDetail(
     version: 1,
     record,
     entry: entryDetail(entry),
+    payload: selectedPayload(record, entry, resultEntry),
     ...(resultEntry ? { result: entryDetail(resultEntry) } : {}),
+    ...(record.kind === "tool" && toolSchema !== undefined ? { schema: boundedValue(toolSchema) } : {}),
+    ...(record.kind === "tool" ? { timing: { durationMs: record.durationMs, durationSource: record.durationSource } } : {}),
   };
 }

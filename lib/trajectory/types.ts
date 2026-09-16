@@ -4,6 +4,7 @@ export type TrajectoryRecordKind =
   | "user"
   | "assistant"
   | "thinking"
+  | "text"
   | "tool"
   | "bash"
   | "compaction"
@@ -19,6 +20,7 @@ export interface TrajectoryRecordSource {
   entryId: string;
   resultEntryId?: string;
   toolCallId?: string;
+  blockIndex?: number;
 }
 
 export interface TrajectoryRecord {
@@ -32,6 +34,10 @@ export interface TrajectoryRecord {
   toolCallId?: string;
   toolName?: string;
   parentId?: string;
+  /** Assistant-owned records share this stable run root id. */
+  agentRunId?: string;
+  /** Original assistant content block index when applicable. */
+  blockIndex?: number;
   summary: string;
   preview?: string;
   /** Tool result text, kept separate from the call signature in `preview`. */
@@ -44,6 +50,8 @@ export interface TrajectoryRecord {
   provider?: string;
   modelId?: string;
   thinkingLevel?: string;
+  stopReason?: string;
+  toolCallCount?: number;
 }
 
 export interface TrajectoryTurn {
@@ -55,6 +63,8 @@ export interface TrajectoryTurn {
   endTimestamp?: string;
   durationMs?: number;
   durationSource: TrajectoryDurationSource;
+  /** Final status of the last agent run in this turn. */
+  finalStatus?: TrajectoryRecordStatus;
 }
 
 export interface TrajectoryProjection {

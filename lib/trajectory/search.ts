@@ -162,11 +162,20 @@ function candidatesFor(record: TrajectoryRecord, entry: SessionEntry | undefined
   if (record.kind === "user") {
     return message.role === "user" ? [{ field: "text", text: collapse(textFromBlocks(message.content, "text")) }] : [];
   }
-  if (record.kind === "assistant") {
-    return message.role === "assistant" ? [{ field: "text", text: collapse(textFromBlocks(message.content, "text")) }] : [];
+  if (record.kind === "assistant") return [];
+  if (record.kind === "text") {
+    if (message.role !== "assistant") return [];
+    const block = record.blockIndex !== undefined && Array.isArray(message.content)
+      ? message.content[record.blockIndex]
+      : undefined;
+    return block?.type === "text" ? [{ field: "text", text: collapse(block.text) }] : [];
   }
   if (record.kind === "thinking") {
-    return message.role === "assistant" ? [{ field: "thinking", text: collapse(textFromBlocks(message.content, "thinking")) }] : [];
+    if (message.role !== "assistant") return [];
+    const block = record.blockIndex !== undefined && Array.isArray(message.content)
+      ? message.content[record.blockIndex]
+      : undefined;
+    return block?.type === "thinking" ? [{ field: "thinking", text: collapse(block.thinking) }] : [];
   }
   if (record.kind === "tool") {
     if (message.role === "assistant") {
@@ -241,7 +250,8 @@ export function buildTrajectorySearch(
         break outer;
       }
       const record = turn.records[recordIndex];
-      if (!allowed.has(record.kind)) continue;
+      const searchType = record.kind === "text" ? "assistant" : record.kind;
+      if (!allowed.has(searchType)) continue;
 
       let hit: { candidate: SearchCandidate; index: number } | null = null;
       for (const candidate of candidatesFor(record, entriesById.get(record.entryId))) {

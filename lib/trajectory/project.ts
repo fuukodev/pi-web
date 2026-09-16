@@ -1,12 +1,11 @@
 import type {
-  AgentMessage,
   AssistantMessage,
   SessionEntry,
   ToolResultMessage,
 } from "../types";
 import { formatToolCallPreview } from "./tool-preview";
+import { trajectoryTurnStatus } from "./runs";
 import type {
-  TrajectoryDurationSource,
   TrajectoryProjection,
   TrajectoryRecord,
   TrajectoryRecordKind,
@@ -68,24 +67,10 @@ function contentPreview(content: unknown): string | undefined {
   return truncate(preview) || undefined;
 }
 
-function blocksOfType(content: unknown, type: "text" | "thinking"): string[] {
-  if (!Array.isArray(content)) return [];
-  const values: string[] = [];
-  for (const block of content) {
-    if (!isRecord(block) || block.type !== type) continue;
-    if (type === "text" && typeof block.text === "string") values.push(block.text);
-    if (type === "thinking" && typeof block.thinking === "string") values.push(block.thinking);
-  }
-  return values;
-}
-
-function textPreview(content: unknown): string | undefined {
-  if (typeof content === "string") return truncate(content) || undefined;
-  return truncate(blocksOfType(content, "text").join("\n")) || undefined;
-}
-
-function thinkingPreview(content: unknown): string | undefined {
-  return truncate(blocksOfType(content, "thinking").join("\n\n")) || undefined;
+function blockPreview(block: unknown, type: "text" | "thinking"): string | undefined {
+  if (!isRecord(block)) return undefined;
+  const value = type === "text" ? block.text : block.thinking;
+  return typeof value === "string" ? truncate(value) || undefined : undefined;
 }
 
 function readToolCall(block: unknown): ToolCallData | null {
@@ -139,9 +124,13 @@ function finalizeTurn(turn: MutableTurn): TrajectoryTurn {
   const durationMs = turn.firstTimestamp !== undefined && turn.lastTimestamp !== undefined
     ? Math.max(0, turn.lastTimestamp - turn.firstTimestamp)
     : undefined;
-  const { firstTimestamp: _firstTimestamp, lastTimestamp: _lastTimestamp, ...result } = turn;
+  const result = { ...turn };
+  delete result.firstTimestamp;
+  delete result.lastTimestamp;
+  const finalStatus = turn.records.length > 0 ? trajectoryTurnStatus(turn.records) : undefined;
   return {
     ...result,
+    ...(finalStatus ? { finalStatus } : {}),
     ...(durationMs !== undefined ? { durationMs, durationSource: "estimated" as const } : { durationSource: "unknown" }),
   };
 }
@@ -197,26 +186,46 @@ function projectAssistant(
   const message = entry.message as AssistantMessage;
   const record = createRecordBase(turn, entry, "assistant");
   const assistantStatus = statusForAssistant(message);
+  const blocks = Array.isArray(message.content) ? message.content : [];
+  const toolCalls = blocks.map(readToolCall).filter((call): call is ToolCallData => call !== null);
   record.status = assistantStatus.status;
   record.error = assistantStatus.error;
-  record.summary = "Assistant step";
-  record.preview = textPreview(message.content);
+  record.summary = "assistant";
   record.provider = message.provider;
   record.modelId = message.model;
   record.usage = message.usage;
+  record.stopReason = message.stopReason;
+  record.toolCallCount = toolCalls.length;
+  record.agentRunId = record.id;
   pushRecord(turn, record);
 
-  const thinking = thinkingPreview(message.content);
-  if (thinking) {
-    const thinkingRecord = createRecordBase(turn, entry, "thinking", `thinking:${entry.id}`);
-    thinkingRecord.parentId = record.id;
-    thinkingRecord.summary = "Thinking";
-    thinkingRecord.preview = thinking;
-    pushRecord(turn, thinkingRecord);
-  }
+  let lastToolResultMs: number | undefined;
+  const assistantTimestamp = validTimestamp(entry.timestamp);
+  for (const [blockIndex, block] of blocks.entries()) {
+    if (isRecord(block) && block.type === "thinking") {
+      const thinkingRecord = createRecordBase(turn, entry, "thinking", `thinking:${entry.id}${blockIndex === 0 ? "" : `:${blockIndex}`}`);
+      thinkingRecord.parentId = record.id;
+      thinkingRecord.agentRunId = record.id;
+      thinkingRecord.blockIndex = blockIndex;
+      thinkingRecord.source.blockIndex = blockIndex;
+      thinkingRecord.summary = "thinking";
+      thinkingRecord.preview = blockPreview(block, "thinking");
+      pushRecord(turn, thinkingRecord);
+      continue;
+    }
 
-  const blocks = Array.isArray(message.content) ? message.content : [];
-  for (const block of blocks) {
+    if (isRecord(block) && block.type === "text") {
+      const textRecord = createRecordBase(turn, entry, "text", `text:${entry.id}:${blockIndex}`);
+      textRecord.parentId = record.id;
+      textRecord.agentRunId = record.id;
+      textRecord.blockIndex = blockIndex;
+      textRecord.source.blockIndex = blockIndex;
+      textRecord.summary = "text";
+      textRecord.preview = blockPreview(block, "text");
+      pushRecord(turn, textRecord);
+      continue;
+    }
+
     const toolCall = readToolCall(block);
     if (!toolCall) continue;
 
@@ -224,6 +233,9 @@ function projectAssistant(
     const resultMessage = result?.message;
     const toolRecord = createRecordBase(turn, entry, "tool", `tool:${entry.id}:${toolCall.id}`);
     toolRecord.parentId = record.id;
+    toolRecord.agentRunId = record.id;
+    toolRecord.blockIndex = blockIndex;
+    toolRecord.source.blockIndex = blockIndex;
     toolRecord.toolCallId = toolCall.id;
     toolRecord.toolName = toolCall.name;
     toolRecord.summary = toolCall.name;
@@ -238,6 +250,10 @@ function projectAssistant(
       toolRecord.error = resultMessage?.isError ? toolRecord.resultPreview ?? "Tool execution failed" : undefined;
       toolRecord.usage = resultMessage?.usage;
       const durationMs = durationBetween(entry.timestamp, result.entry.timestamp);
+      const resultTimestamp = validTimestamp(result.entry.timestamp);
+      if (resultTimestamp && (lastToolResultMs === undefined || resultTimestamp.ms > lastToolResultMs)) {
+        lastToolResultMs = resultTimestamp.ms;
+      }
       if (durationMs !== undefined) {
         toolRecord.durationMs = durationMs;
         toolRecord.durationSource = "estimated";
@@ -246,6 +262,11 @@ function projectAssistant(
       toolRecord.status = "unknown";
     }
     pushRecord(turn, toolRecord);
+  }
+
+  if (assistantTimestamp && lastToolResultMs !== undefined && lastToolResultMs >= assistantTimestamp.ms) {
+    record.durationMs = lastToolResultMs - assistantTimestamp.ms;
+    record.durationSource = "estimated";
   }
 }
 

@@ -75,17 +75,17 @@ export function formatToolCallPreview(toolName: string, input: unknown): string 
   for (let index = 0; index < values.length; index += 1) {
     const more = index < values.length - 1 || capped;
     const candidate = [...included, values[index]];
-    const text = `${name}(${candidate.join(", ")}${more ? ", …" : ""})`;
+    const text = `${name} (${candidate.join(", ")}${more ? ", …" : ""})`;
     if (text.length <= MAX_TOOL_PREVIEW_LENGTH) included = candidate;
     else break;
   }
 
-  const head = `${name}(${values[0]}`;
+  const head = `${name} (${values[0]}`;
   if (included.length === 0) {
-    return head.length + 2 <= MAX_TOOL_PREVIEW_LENGTH
+    return head.length + 3 <= MAX_TOOL_PREVIEW_LENGTH
       ? `${head}…)`
-      : `${head.slice(0, MAX_TOOL_PREVIEW_LENGTH - 2)}…)`;
+      : `${head.slice(0, MAX_TOOL_PREVIEW_LENGTH - 3)}…)`;
   }
   const more = included.length < values.length || capped;
-  return `${name}(${included.join(", ")}${more ? ", …" : ""})`;
+  return `${name} (${included.join(", ")}${more ? ", …" : ""})`;
 }

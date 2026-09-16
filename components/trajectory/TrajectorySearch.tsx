@@ -272,7 +272,7 @@ export function TrajectorySearch({
                     {t(TRAJECTORY_KIND_LABEL_KEYS[match.record.kind])}
                   </span>
                   <span style={{ minWidth: 0, overflow: "hidden", fontSize: 12, fontWeight: 600, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {match.record.summary}
+                    {match.record.preview ?? match.record.summary}
                   </span>
                   {badgeKey && (
                     <span style={{ flexShrink: 0, padding: "0 4px", border: "1px solid var(--border)", borderRadius: 3, color: "var(--text-dim)", fontSize: 10 }}>

@@ -22,7 +22,7 @@ test("trajectory detail route prefers live sessions and never accepts a file pat
 
 test("trajectory detail route resolves records by id so thinking rows stay distinct", () => {
   assert.match(routeSource, /recordId = readOptionalId\(url\.searchParams\.get\("recordId"\), "recordId"\)/);
-  assert.match(routeSource, /buildTrajectoryRecordDetail\(branch, entryId, toolCallId, recordId\)/);
+  assert.match(routeSource, /buildTrajectoryRecordDetail\(branch, entryId, toolCallId, recordId, toolSchema\)/);
 });
 
 test("trajectory detail route uses generic errors for unexpected failures", () => {

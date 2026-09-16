@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SessionInfo } from "@/lib/types";
+import type { SessionInfo, ToolResultMessage } from "@/lib/types";
 import type { AgentPhase } from "@/hooks/useAgentSession";
 import type { StreamingState } from "@/lib/streaming-message";
 import type { TrajectoryRecord } from "@/lib/trajectory/types";
@@ -26,6 +26,9 @@ export interface TrajectoryPaneProps {
   isCompacting: boolean;
   agentPhase: AgentPhase;
   streamState: StreamingState;
+  activeToolResults: ReadonlyMap<string, ToolResultMessage>;
+  liveUserMessage?: string | null;
+  runError?: string | null;
   onJumpToChat?: (target: { entryId: string; toolCallId?: string }) => void;
 }
 
@@ -54,8 +57,9 @@ function InspectorPanel({ session, activeLeafId, trajectory, record, onClose, on
 export function TrajectoryPane(props: TrajectoryPaneProps) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
-  const trajectory = useTrajectory(props);
+  const trajectory = useTrajectory({ ...props, liveLoadingLabel: t("trajectory.liveLoading") });
   const ledgerScrollRef = useRef<HTMLDivElement>(null);
+  const liveRunActiveRef = useRef<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [pendingScrollRecordId, setPendingScrollRecordId] = useState<string | null>(null);
   const search = useTrajectorySearch({
@@ -68,6 +72,18 @@ export function TrajectoryPane(props: TrajectoryPaneProps) {
   useEffect(() => {
     if (!props.enabled) setSearchOpen(false);
   }, [props.enabled]);
+
+  useEffect(() => {
+    const liveUser = trajectory.liveRecords.find((record) => record.kind === "user");
+    const liveKey = trajectory.liveRecords.length === 0 ? null : liveUser?.preview ?? "active";
+    if (props.enabled && liveKey && liveKey !== liveRunActiveRef.current) {
+      requestAnimationFrame(() => {
+        const container = ledgerScrollRef.current;
+        if (container) container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      });
+    }
+    liveRunActiveRef.current = liveKey;
+  }, [props.enabled, trajectory.liveRecords]);
 
   // The anchored page renders after `ensureTurnLoaded` resolves; waiting on the
   // page state keeps the scroll target stable after the new turns commit.

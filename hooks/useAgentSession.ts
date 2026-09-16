@@ -293,6 +293,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [hasEarlierMessages, setHasEarlierMessages] = useState(false);
   const [streamState, dispatch] = useReducer(streamReducer, INITIAL_STREAMING_STATE);
   const [agentRunning, setAgentRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
   const [bashRunning, setBashRunning] = useState(false);
   const [pendingBash, setPendingBash] = useState<{ command: string; excludeFromContext: boolean } | null>(null);
   const [modelNames, setModelNames] = useState<Record<string, string>>({});
@@ -886,6 +887,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     agentRunningRef.current = false;
     setAgentRunning(false);
     setAgentPhase(null);
+    setRunError(null);
     setRetryInfo(null);
     setActiveToolResults(new Map());
     dispatch({ type: "end" });
@@ -1124,6 +1126,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
       case "agent_start":
         cancelEventStreamGrace();
+        setRunError(null);
         sdkAgentActiveRef.current = true;
         agentRunningRef.current = true;
         setAgentRunning(true);
@@ -1190,9 +1193,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           }
         }
         break;
-      case "prompt_error":
-        addNotice({ type: "error", message: (event.errorMessage as string | undefined) ?? "Command failed" });
+      case "prompt_error": {
+        const message = (event.errorMessage as string | undefined) ?? "Command failed";
+        setRunError(message);
+        addNotice({ type: "error", message });
         break;
+      }
       case "extension_error":
         addNotice({
           type: "error",
@@ -1209,6 +1215,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           const msg = event.message as AgentMessage | undefined;
           if (msg?.role === "user") break;
           if (msg?.role === "assistant") {
+            if (msg.errorMessage) setRunError(msg.errorMessage);
             dispatch({ type: "snapshot", message: msg });
             if (msg.content.length > 0) setAgentPhase(null);
           } else if (msg) {
@@ -1260,7 +1267,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             return [...prev, delivered];
           });
         } else if (completed) {
-          setMessages((prev) => [...prev, normalizeToolCalls(completed)]);
+          const normalized = normalizeToolCalls(completed);
+          if (normalized.role === "assistant" && normalized.errorMessage) setRunError(normalized.errorMessage);
+          setMessages((prev) => [...prev, normalized]);
         }
         dispatch({ type: "end" });
         setAgentPhase({ kind: "waiting_model" });
@@ -1403,6 +1412,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     optimisticUserMessageKeyRef.current = userMessageKey(userMsg);
     promptRunIdRef.current = promptRunId;
     agentRunningRef.current = true;
+    setRunError(null);
     setAgentRunning(true);
     setAgentPhase(isSlashCommandPrompt ? { kind: "running_command" } : { kind: "waiting_model" });
     dispatch({ type: "start" });
@@ -2166,7 +2176,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   return {
     // State
     data, loading, error, activeLeafId, messages, activeToolResults, entryIds, historyCursor, hasEarlierMessages, streamState,
-    agentRunning, modelNames, modelList, modelError, modelScopeWarnings, modelThinkingLevels, modelThinkingLevelMaps, newSessionModel, toolPreset, thinkingLevel,
+    agentRunning, runError, modelNames, modelList, modelError, modelScopeWarnings, modelThinkingLevels, modelThinkingLevelMaps, newSessionModel, toolPreset, thinkingLevel,
     retryInfo, contextUsage, systemPrompt, forkingEntryId,
     isCompacting, compactError, compactResult, currentModel, displayModel, modelSwitching, sessionStats,
     slashCommands, slashCommandsLoading, queuedMessages,

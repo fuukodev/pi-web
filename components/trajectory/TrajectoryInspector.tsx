@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { TrajectoryRecord } from "@/lib/trajectory/types";
+import { TRAJECTORY_KIND_LABEL_KEYS } from "@/lib/trajectory/labels";
 import type { TrajectoryRecordDetail } from "@/lib/trajectory/detail";
 import { copyText } from "@/lib/clipboard";
 import { buildTrajectoryCopyText } from "@/lib/trajectory/copy";
@@ -73,7 +74,7 @@ export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, l
   const params = new URLSearchParams({ inline: "1", targetId: record.entryId });
   if (activeLeafId) params.set("leafId", activeLeafId);
   const historyHref = `/api/sessions/${encodeURIComponent(sessionId)}/export?${params}`;
-  const payload = detail?.entry.message?.content ?? detail?.entry.message ?? detail?.entry;
+  const isTool = record.kind === "tool";
   const result = detail?.result?.message?.content ?? detail?.result;
   const copyValue = detail ? buildTrajectoryCopyText(record, detail) : null;
   const copyLabel = copyState === "copied" ? t("trajectory.copySuccess") : t("trajectory.copyRecord");
@@ -92,8 +93,7 @@ export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, l
     <aside data-trajectory-inspector="true" data-trajectory-kind={record.kind} data-trajectory-status={record.status} role="complementary" aria-labelledby="trajectory-inspector-heading" style={{ minWidth: 0, height: "100%", overflow: "auto", padding: 16, borderLeft: "3px solid var(--trajectory-kind-color, var(--border))", background: "var(--bg-panel)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <h2 id="trajectory-inspector-heading" style={{ margin: 0, overflow: "hidden", color: "var(--text)", fontSize: 14, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.summary}</h2>
-          <div style={{ marginTop: 4, color: "var(--trajectory-kind-color, var(--text-dim))", fontSize: 11 }}>{t(`trajectory.${record.kind === "branchSummary" ? "branchSummary" : record.kind}`)}</div>
+          <h2 id="trajectory-inspector-heading" style={{ margin: 0, overflow: "hidden", color: "var(--text)", fontSize: 14, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t(TRAJECTORY_KIND_LABEL_KEYS[record.kind])}</h2>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
           <button
@@ -148,11 +148,11 @@ export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, l
         </div>
       )}
 
-      <Section title={t("trajectory.summary")}>
+      <Section title={t(isTool ? "trajectory.command" : "trajectory.message")}>
         <div style={{ color: "var(--text)", fontSize: 12, lineHeight: 1.5 }}>{record.preview ?? t("trajectory.notAvailable")}</div>
         <dl style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", gap: "5px 10px", margin: "10px 0 0", color: "var(--text-muted)", fontSize: 11 }}>
           <dt>{t("trajectory.source")}</dt><dd style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{record.entryId}</dd>
-          <dt>{t("trajectory.timing")}</dt><dd style={{ margin: 0 }}>{durationLabel(record, t)}</dd>
+          {isTool && <><dt>{t("trajectory.timing")}</dt><dd style={{ margin: 0 }}>{detail?.timing ? durationLabel({ ...record, durationMs: detail.timing.durationMs, durationSource: detail.timing.durationSource }, t) : durationLabel(record, t)}</dd></>}
         </dl>
       </Section>
 
@@ -165,14 +165,16 @@ export function TrajectoryInspector({ sessionId, activeLeafId, record, detail, l
       {!loading && !error && detail && (
         <>
           <Section title={t("trajectory.payload")}>
-            <pre style={{ maxHeight: 280, overflow: "auto", margin: 0, padding: 9, border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg)", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: 1.45, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{jsonText(payload)}</pre>
+            <pre style={{ maxHeight: 280, overflow: "auto", margin: 0, padding: 9, border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg)", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: 1.45, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{jsonText(detail.payload)}</pre>
           </Section>
-          <Section title={t("trajectory.result")}>
-            {result ? <pre style={{ maxHeight: 280, overflow: "auto", margin: 0, padding: 9, border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg)", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: 1.45, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{jsonText(result)}</pre> : <div style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("trajectory.notAvailable")}</div>}
-          </Section>
-          <Section title={t("trajectory.schema")}>
-            <div style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("trajectory.notAvailable")}</div>
-          </Section>
+          {isTool && <>
+            <Section title={t("trajectory.result")}>
+              {result ? <pre style={{ maxHeight: 280, overflow: "auto", margin: 0, padding: 9, border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg)", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: 1.45, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{jsonText(result)}</pre> : <div style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("trajectory.notAvailable")}</div>}
+            </Section>
+            <Section title={t("trajectory.schema")}>
+              {detail?.schema ? <pre style={{ maxHeight: 280, overflow: "auto", margin: 0, padding: 9, border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg)", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: 1.45, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{jsonText(detail.schema)}</pre> : <div style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("trajectory.notAvailable")}</div>}
+            </Section>
+          </>}
         </>
       )}
 

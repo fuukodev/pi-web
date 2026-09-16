@@ -30,6 +30,10 @@ export interface BuildLiveTrajectoryRecordsOptions {
   pendingBash: { command: string; excludeFromContext: boolean } | null;
   agentPhase: LiveTrajectoryPhase | null;
   streamState: LiveTrajectoryStreamState;
+  activeToolResults?: ReadonlyMap<string, { isError?: boolean; content?: unknown }>;
+  liveUserMessage?: string | null;
+  runError?: string | null;
+  loadingLabel?: string;
 }
 
 function truncate(value: string): string {
@@ -37,19 +41,6 @@ function truncate(value: string): string {
   return trimmed.length <= MAX_LIVE_PREVIEW_LENGTH
     ? trimmed
     : `${trimmed.slice(0, MAX_LIVE_PREVIEW_LENGTH - 1)}…`;
-}
-
-function messagePreview(message: AssistantMessage): string | undefined {
-  const text: string[] = [];
-  const thinking: string[] = [];
-  let hasImage = false;
-  for (const block of message.content ?? []) {
-    if (block.type === "text") text.push(block.text);
-    else if (block.type === "thinking") thinking.push(block.thinking);
-    else if (block.type === "image") hasImage = true;
-  }
-  const preview = text.join("\n") || thinking.join("\n") || (hasImage ? "[image]" : "");
-  return truncate(preview) || undefined;
 }
 
 function duration(now: number, startedAt: number | undefined): Pick<TrajectoryRecord, "durationMs" | "durationSource"> {
@@ -87,28 +78,60 @@ export function buildLiveTrajectoryRecords({
   pendingBash,
   agentPhase,
   streamState,
+  activeToolResults,
+  liveUserMessage,
+  runError,
+  loadingLabel = "Loading…",
 }: BuildLiveTrajectoryRecordsOptions): TrajectoryRecord[] {
   const records: TrajectoryRecord[] = [];
-  if (streamState.isStreaming && streamState.streamingMessage) {
-    const record = baseRecord("live:assistant", "assistant", "Assistant step", "live:assistant", now, starts.assistant);
-    record.preview = messagePreview(streamState.streamingMessage);
-    record.provider = streamState.streamingMessage.provider;
-    record.modelId = streamState.streamingMessage.model;
+  const active = agentRunning || bashRunning || isCompacting || streamState.isStreaming;
+  if (!active) return [];
+
+  if (liveUserMessage) {
+    const userRecord = baseRecord("live:user", "user", "user", "live:user", now, undefined);
+    userRecord.status = "complete";
+    userRecord.preview = truncate(liveUserMessage) || undefined;
+    records.push(userRecord);
+  }
+
+  if (agentRunning || streamState.isStreaming || runError) {
+    const streamError = streamState.streamingMessage?.errorMessage;
+    const record = baseRecord("live:assistant", "assistant", "assistant", "live:assistant", now, starts.assistant);
+    record.agentRunId = record.id;
+    record.preview = loadingLabel;
+    record.provider = streamState.streamingMessage?.provider;
+    record.modelId = streamState.streamingMessage?.model;
+    const error = runError?.trim() || streamError?.trim();
+    if (error || streamState.streamingMessage?.stopReason === "error") {
+      record.status = "error";
+      record.error = error || "Unknown provider error";
+      record.preview = record.error;
+    }
     records.push(record);
-  } else if (agentRunning && agentPhase?.kind === "waiting_model") {
-    records.push(baseRecord("live:assistant", "assistant", "Waiting for model", "live:assistant", now, starts.assistant));
-  } else if (agentRunning && agentPhase?.kind === "running_command") {
-    records.push(baseRecord("live:command", "custom", "Running command", "live:command", now, starts.command));
+  }
+
+  if (agentRunning && agentPhase?.kind === "running_command") {
+    const record = baseRecord("live:command", "custom", "Running command", "live:command", now, starts.command);
+    records.push(record);
   }
 
   if (agentPhase?.kind === "running_tools") {
     for (const tool of agentPhase.tools ?? []) {
       const record = baseRecord(`live:tool:${tool.id}`, "tool", tool.name, `live:tool:${tool.id}`, now, starts.tools.get(tool.id));
       record.parentId = "live:assistant";
+      record.agentRunId = "live:assistant";
       record.toolCallId = tool.id;
       record.toolName = tool.name;
       record.source.toolCallId = tool.id;
       record.preview = tool.progress;
+      const activeResult = activeToolResults?.get(tool.id);
+      if (activeResult?.isError) {
+        record.status = "error";
+        const errorText = Array.isArray(activeResult.content)
+          ? activeResult.content.filter((part): part is { type: "text"; text: string } => Boolean(part && typeof part === "object" && (part as { type?: unknown }).type === "text" && typeof (part as { text?: unknown }).text === "string")).map((part) => part.text).join(" ").trim()
+          : "";
+        record.error = errorText || "Tool execution failed";
+      }
       records.push(record);
     }
   }
@@ -123,6 +146,5 @@ export function buildLiveTrajectoryRecords({
     records.push(baseRecord("live:compaction", "compaction", "Compaction", "live:compaction", now, starts.compaction));
   }
 
-  if (!agentRunning && !bashRunning && !isCompacting) return [];
   return records;
 }

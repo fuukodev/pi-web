@@ -36,8 +36,16 @@ test("anchors the loaded window on a turn that is not loaded yet", () => {
   assert.match(source, /return next\.turns\.some/);
 });
 
-test("refreshes persisted trajectory after a busy run settles", () => {
+test("refreshes the latest persisted trajectory after a busy run settles", () => {
   assert.match(source, /wasBusyRef/);
   assert.match(source, /if \(wasBusyRef\.current && !busy && enabled/);
-  assert.match(source, /reload\(\)/);
+  assert.match(source, /reload\(\{ preserveView: true, latest: true \}\)/);
+  assert.match(source, /latest/);
+  assert.match(source, /preserveView/);
+});
+
+test("feeds the live user message and immediate run errors into the overlay", () => {
+  assert.match(source, /liveUserMessage/);
+  assert.match(source, /runError/);
+  assert.match(source, /liveUserMessage,\n    runError/);
 });

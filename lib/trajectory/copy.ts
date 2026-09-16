@@ -42,6 +42,11 @@ function contentText(content: unknown, mode: CopyMode): string {
   if (isRecord(content) && content.truncated === true && typeof content.value === "string") {
     return content.value;
   }
+  if (isRecord(content)) {
+    if (mode === "text" && content.type === "text") return jsonText(content.text);
+    if (mode === "thinking" && content.type === "thinking") return jsonText(content.thinking);
+    return "";
+  }
   if (!Array.isArray(content)) return "";
 
   const parts: string[] = [];
@@ -97,9 +102,9 @@ function toolOutput(record: TrajectoryRecord, resultMessage: DataRecord | undefi
   return record.error ?? record.resultPreview ?? "(no output)";
 }
 
-function copyDirectRecord(record: TrajectoryRecord, entryMessage: DataRecord | undefined): string | null {
+function copyDirectRecord(record: TrajectoryRecord, entryMessage: DataRecord | undefined, payload: unknown): string | null {
   const mode: CopyMode = record.kind === "thinking" ? "thinking" : "text";
-  const content = contentText(entryMessage?.content, mode);
+  const content = contentText(record.kind === "text" || record.kind === "thinking" ? payload ?? entryMessage?.content : entryMessage?.content, mode);
   if (content) return content;
 
   const errorMessage = typeof entryMessage?.errorMessage === "string" ? entryMessage.errorMessage : "";
@@ -123,8 +128,8 @@ export function buildTrajectoryCopyText(
     return `${command}\n--- ${label} ---\n${toolOutput(record, resultMessage)}`;
   }
 
-  if (record.kind === "user" || record.kind === "assistant" || record.kind === "thinking") {
-    return copyDirectRecord(record, entryMessage);
+  if (record.kind === "user" || record.kind === "assistant" || record.kind === "thinking" || record.kind === "text") {
+    return copyDirectRecord(record, entryMessage, detail.payload);
   }
 
   return null;
