@@ -1862,6 +1862,7 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedOk, setSavedOk] = useState(false);
   const [warnings, setWarnings] = useState<SettingsWarning[]>([]);
+  const applySequenceRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -1908,6 +1909,10 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
     modelId?: string;
     thinkingLevel?: ThinkingLevel;
   }) => {
+    // A superseded request must not write state: its warnings and effective
+    // model describe an older selection than the one on screen.
+    const sequence = ++applySequenceRef.current;
+    const isCurrent = () => sequence === applySequenceRef.current;
     setSaving(true);
     setSaveError(null);
     setSavedOk(false);
@@ -1923,6 +1928,7 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
           warnings?: SettingsWarning[];
           error?: string;
         }) | null;
+      if (!isCurrent()) return;
       if (!res.ok || !body || body.error) throw new Error(body?.error ?? `HTTP ${res.status}`);
       setDefaults(body);
       if (body.effectiveModel !== undefined) setEffectiveDefault(body.effectiveModel);
@@ -1930,9 +1936,10 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 2000);
     } catch (error) {
+      if (!isCurrent()) return;
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
-      setSaving(false);
+      if (isCurrent()) setSaving(false);
     }
   }, [cwd]);
 

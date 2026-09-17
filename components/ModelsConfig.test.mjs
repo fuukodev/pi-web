@@ -230,3 +230,14 @@ test("documents that chat-side selection is session-scoped, not a default", asyn
     assert.match(zhSource, new RegExp(`"${key.replace(/\./g, "\\.")}":`));
   }
 });
+
+test("a superseded defaults save cannot overwrite the newest result", () => {
+  const detail = source.slice(
+    source.indexOf("function DefaultsDetail("),
+    source.indexOf("// ── Main component"),
+  );
+
+  assert.match(detail, /const sequence = \+\+applySequenceRef\.current;/);
+  assert.match(detail, /if \(!isCurrent\(\)\) return;/);
+  assert.match(detail, /if \(isCurrent\(\)\) setSaving\(false\);/);
+});
