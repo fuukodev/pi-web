@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-export interface ConfigSelectOption {
-  value: string;
+export interface ConfigSelectOption<T extends string = string> {
+  value: T;
   /** Primary text, e.g. "high". */
   label: string;
   /** Secondary text on the right, e.g. "High reasoning". */
@@ -27,10 +27,10 @@ const MIN_DOWNWARD_HEIGHT = 120;
  * menu (the settings dialog must not close with it), arrow keys move through
  * options, outside clicks dismiss, and the trigger reports `aria-expanded`.
  */
-export function ConfigSelect({ value, options, onChange, disabled = false, ariaLabel, icon }: {
-  value: string;
-  options: readonly ConfigSelectOption[];
-  onChange: (value: string) => void;
+export function ConfigSelect<T extends string>({ value, options, onChange, disabled = false, ariaLabel, icon }: {
+  value: T;
+  options: readonly ConfigSelectOption<T>[];
+  onChange: (value: T) => void;
   disabled?: boolean;
   ariaLabel: string;
   /** Optional leading glyph, matching the composer's thinking control. */

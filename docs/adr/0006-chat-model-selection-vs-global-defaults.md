@@ -52,6 +52,10 @@ actions. Pi Web has one control, so it can only honestly implement the first.
 - The defaults panel reports the **effective** model (`effectiveModel`) after
   `enabledModels` scope and provider auth are applied, because a saved default
   that is out of scope or unauthenticated is silently skipped at startup.
+- The defaults pane is a **form**, not a set of switches: model and level edits
+  stay in a local draft until the footer's Save button issues one PUT (sending
+  only the fields that changed). Warnings describe what is stored, so they are
+  shown while the draft is clean and refresh from the save response.
 - Thinking-level support is judged on the **server** only. `GET /api/settings`
   and `PUT /api/settings` both return `warnings` for the model the level applies
   to — the requested model, or the saved one when only the level changes. The

@@ -650,7 +650,7 @@ export const zhCNLocale: LocalePlugin = {
     "models.defaultsNoModels": "没有可用模型",
     "models.defaultsModelsUnavailable": "模型列表不可用",
     "models.defaultsUnavailable": "无法读取 ~/.pi/agent/settings.json。",
-    "models.defaultsAutoSave": "修改会立即保存",
+    "models.defaultsUnsaved": "有未保存的改动",
     "models.warning.unsupported_thinking_level": "{model} 不支持思考等级 {level}，pi 会在会话中自行降级（支持：{supported}）。",
     "i18n.testingModel": "正在测试模型连接...",
     "i18n.connected": "已连接",

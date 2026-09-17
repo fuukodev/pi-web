@@ -650,7 +650,7 @@ export const enLocale: LocalePlugin = {
     "models.defaultsNoModels": "No models available",
     "models.defaultsModelsUnavailable": "Model list unavailable",
     "models.defaultsUnavailable": "Unable to read ~/.pi/agent/settings.json.",
-    "models.defaultsAutoSave": "Changes save automatically",
+    "models.defaultsUnsaved": "Unsaved changes",
     "models.warning.unsupported_thinking_level": "{model} does not support thinking level {level}, so pi clamps it per session (supported: {supported}).",
     "i18n.testingModel": "Testing model connection...",
     "i18n.connected": "Connected",

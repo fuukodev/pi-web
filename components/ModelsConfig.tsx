@@ -1826,7 +1826,6 @@ function AddProviderPicker({
     </div>
   );
 }
-
 // ── Global startup defaults ───────────────────────────────────────────────────
 
 /** pi's built-in thinking default (SDK: core/defaults.js DEFAULT_THINKING_LEVEL). */
@@ -1854,29 +1853,80 @@ interface DefaultsModelsPayload {
   defaultModel?: { provider: string; modelId: string } | null;
 }
 
+/** Editable copy of pi's saved defaults. Nothing is written until Save. */
+interface DefaultsDraft {
+  provider: string | null;
+  modelId: string | null;
+  level: ThinkingLevel | null;
+}
+
+interface DefaultsForm {
+  loading: boolean;
+  loadError: string | null;
+  modelsUnavailable: boolean;
+  modelList: ModelSelectorOption[];
+  effectiveModel: { provider: string; modelId: string } | null;
+  warnings: SettingsWarning[];
+  /** Saved defaults, or null before the first load. */
+  saved: PiGlobalDefaultsPayload | null;
+  draft: DefaultsDraft;
+  displayedLevel: ThinkingLevel;
+  levelOptions: ThinkingLevel[];
+  supportedLevels: readonly string[];
+  dirty: boolean;
+  saving: boolean;
+  savedOk: boolean;
+  saveError: string | null;
+  setModel: (provider: string, modelId: string) => void;
+  setLevel: (level: ThinkingLevel) => void;
+  save: () => Promise<void>;
+}
+
+function draftFromSaved(saved: PiGlobalDefaultsPayload): DefaultsDraft {
+  return {
+    provider: saved.defaultProvider ?? null,
+    modelId: saved.defaultModel ?? null,
+    level: saved.defaultThinkingLevel ?? null,
+  };
+}
+
 /**
- * Edits pi's global startup defaults explicitly.
+ * Draft state for pi's global defaults.
  *
- * Everything here is global: it changes what the `pi` CLI/TUI starts with, not
- * just Pi Web. The chat composer is deliberately session-scoped, so this panel
- * is the only place Pi Web writes these fields.
+ * The pane is a form, not a set of switches: edits stay local until Save, so a
+ * half-finished selection never reaches `~/.pi/agent/settings.json` — the file
+ * the `pi` CLI and TUI read. State lives here rather than in `DefaultsDetail`
+ * because the shared config footer owns the Save button.
+ *
+ * `enabled` gates the fetch so opening the Models section for a provider does
+ * not pay for a model-scope resolution.
  */
-function DefaultsDetail({ cwd }: { cwd?: string | null }) {
-  const { t } = useI18n();
-  const [defaults, setDefaults] = useState<PiGlobalDefaultsPayload | null>(null);
+function useDefaultsForm(cwd: string | null | undefined, enabled: boolean): DefaultsForm {
+  const [saved, setSaved] = useState<PiGlobalDefaultsPayload | null>(null);
+  const [draft, setDraft] = useState<DefaultsDraft>({ provider: null, modelId: null, level: null });
   const [modelList, setModelList] = useState<ModelSelectorOption[]>([]);
   const [thinkingLevels, setThinkingLevels] = useState<Record<string, string[]>>({});
-  const [effectiveDefault, setEffectiveDefault] = useState<{ provider: string; modelId: string } | null>(null);
+  const [effectiveModel, setEffectiveModel] = useState<{ provider: string; modelId: string } | null>(null);
+  const [warnings, setWarnings] = useState<SettingsWarning[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [modelsUnavailable, setModelsUnavailable] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedOk, setSavedOk] = useState(false);
-  const [warnings, setWarnings] = useState<SettingsWarning[]>([]);
-  const applySequenceRef = useRef(0);
+  // A superseded response must not write state: its values describe an older
+  // request than the one the user is looking at.
+  const saveSequenceRef = useRef(0);
+  // Keyed by cwd rather than a "started" latch: a cancelled first pass (React's
+  // StrictMode double effect) must still be able to load, and returning to the
+  // pane must keep the draft instead of refetching over it.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
+    const loadKey = cwd ?? "";
+    if (loadedKey === loadKey) return;
+
     let cancelled = false;
     const modelsUrl = cwd ? `/api/models?cwd=${encodeURIComponent(cwd)}` : "/api/models";
     const settingsUrl = cwd ? `/api/settings?cwd=${encodeURIComponent(cwd)}` : "/api/settings";
@@ -1897,18 +1947,20 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
         .then((res) => (res.ok ? res.json() as Promise<DefaultsModelsPayload> : null))
         .catch(() => null),
     ])
-      .then(([saved, models]) => {
+      .then(([settings, models]) => {
         if (cancelled) return;
-        setDefaults(saved);
-        setWarnings(saved.warnings ?? []);
+        setSaved(settings);
+        setDraft(draftFromSaved(settings));
+        setWarnings(settings.warnings ?? []);
         setModelList((models?.modelList ?? []).map((model) => ({
           provider: model.provider,
           modelId: model.id,
           name: model.name,
         })));
         setThinkingLevels(models?.thinkingLevels ?? {});
-        setEffectiveDefault(models?.defaultModel ?? null);
+        setEffectiveModel(models?.defaultModel ?? null);
         setModelsUnavailable(!models);
+        setLoadedKey(loadKey);
       })
       .catch((error) => {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : String(error));
@@ -1918,36 +1970,54 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
       });
 
     return () => { cancelled = true; };
-  }, [cwd]);
+  }, [cwd, enabled, loadedKey]);
 
-  const apply = useCallback(async (update: {
-    provider?: string;
-    modelId?: string;
-    thinkingLevel?: ThinkingLevel;
-  }) => {
-    // A superseded request must not write state: its warnings and effective
-    // model describe an older selection than the one on screen.
-    const sequence = ++applySequenceRef.current;
-    const isCurrent = () => sequence === applySequenceRef.current;
+  const setModel = useCallback((provider: string, modelId: string) => {
+    setDraft((current) => ({ ...current, provider, modelId }));
+  }, []);
+
+  const setLevel = useCallback((level: ThinkingLevel) => {
+    setDraft((current) => ({ ...current, level }));
+  }, []);
+
+  const modelDirty = saved !== null && (
+    draft.provider !== (saved.defaultProvider ?? null)
+    || draft.modelId !== (saved.defaultModel ?? null)
+  );
+  const levelDirty = saved !== null && draft.level !== (saved.defaultThinkingLevel ?? null);
+  const dirty = saved !== null && (modelDirty || levelDirty);
+
+  const save = useCallback(async () => {
+    if (!modelDirty && !levelDirty) return;
+    const sequence = ++saveSequenceRef.current;
+    const isCurrent = () => sequence === saveSequenceRef.current;
     setSaving(true);
     setSaveError(null);
     setSavedOk(false);
     try {
-      const res = await fetch("/api/settings", {
+      const response = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...update, ...(cwd ? { cwd } : {}) }),
+        body: JSON.stringify({
+          // Send only what changed: a level-only edit must not fail just because
+          // the saved model is no longer resolvable.
+          ...(modelDirty && draft.provider && draft.modelId
+            ? { provider: draft.provider, modelId: draft.modelId }
+            : {}),
+          ...(levelDirty && draft.level ? { thinkingLevel: draft.level } : {}),
+          ...(cwd ? { cwd } : {}),
+        }),
       });
-      const body = await res.json().catch(() => null) as
+      const body = await response.json().catch(() => null) as
         (PiGlobalDefaultsPayload & {
           effectiveModel?: { provider: string; modelId: string } | null;
-          warnings?: SettingsWarning[];
           error?: string;
         }) | null;
       if (!isCurrent()) return;
-      if (!res.ok || !body || body.error) throw new Error(body?.error ?? `HTTP ${res.status}`);
-      setDefaults(body);
-      if (body.effectiveModel !== undefined) setEffectiveDefault(body.effectiveModel);
+      if (!response.ok || !body || body.error) throw new Error(body?.error ?? `HTTP ${response.status}`);
+      setSaved(body);
+      setDraft(draftFromSaved(body));
+      if (body.effectiveModel !== undefined) setEffectiveModel(body.effectiveModel);
       setWarnings(body.warnings ?? []);
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 2000);
@@ -1957,26 +2027,63 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
     } finally {
       if (isCurrent()) setSaving(false);
     }
-  }, [cwd]);
+  }, [cwd, draft.level, draft.modelId, draft.provider, levelDirty, modelDirty]);
 
-  const selectedModel = defaults?.defaultProvider && defaults.defaultModel
-    ? { provider: defaults.defaultProvider, modelId: defaults.defaultModel }
-    : null;
-  const selectedKey = selectedModel ? `${selectedModel.provider}:${selectedModel.modelId}` : null;
-  const supportedLevels = (selectedKey ? thinkingLevels[selectedKey] : undefined) ?? [...THINKING_LEVELS];
-  const pinnedLevel = defaults?.defaultThinkingLevel ?? null;
-  const displayedLevel: ThinkingLevel = pinnedLevel ?? PI_BUILTIN_THINKING_LEVEL;
+  const selectedKey = draft.provider && draft.modelId ? `${draft.provider}:${draft.modelId}` : null;
+  const supportedLevels = (selectedKey ? thinkingLevels[selectedKey] : undefined) ?? THINKING_LEVELS;
+  const displayedLevel = draft.level ?? PI_BUILTIN_THINKING_LEVEL;
   const levelOptions = Array.from(new Set<string>([...supportedLevels, displayedLevel])) as ThinkingLevel[];
-  const modelKnown = selectedModel
-    ? modelList.some((model) => model.provider === selectedModel.provider && model.modelId === selectedModel.modelId)
-    : false;
 
-  if (loading) {
+  return {
+    loading,
+    loadError,
+    modelsUnavailable,
+    modelList,
+    effectiveModel,
+    warnings,
+    saved,
+    draft,
+    displayedLevel,
+    levelOptions,
+    supportedLevels,
+    dirty,
+    saving,
+    savedOk,
+    saveError,
+    setModel,
+    setLevel,
+    save,
+  };
+}
+
+/**
+ * Pi's global startup defaults, edited as a form.
+ *
+ * Everything here is global: it changes what the `pi` CLI/TUI starts with, not
+ * just Pi Web. The chat composer is deliberately session-scoped, so this panel
+ * is the only place Pi Web writes these fields.
+ */
+function DefaultsDetail({ form }: { form: DefaultsForm }) {
+  const { t } = useI18n();
+
+  if (form.loading) {
     return <ConfigEmptyState>{t("i18n.loading")}</ConfigEmptyState>;
   }
-  if (loadError || !defaults) {
-    return <ConfigEmptyState>{loadError ?? t("models.defaultsUnavailable")}</ConfigEmptyState>;
+  if (form.loadError || !form.saved) {
+    return <ConfigEmptyState>{form.loadError ?? t("models.defaultsUnavailable")}</ConfigEmptyState>;
   }
+
+  const selectedModel = form.draft.provider && form.draft.modelId
+    ? { provider: form.draft.provider, modelId: form.draft.modelId }
+    : null;
+  const modelKnown = selectedModel
+    ? form.modelList.some((model) => model.provider === selectedModel.provider && model.modelId === selectedModel.modelId)
+    : false;
+  // Saved-state hints would describe the old selection while the draft is ahead
+  // of it, so they wait for the next save.
+  const savedModel = form.saved.defaultProvider && form.saved.defaultModel
+    ? { provider: form.saved.defaultProvider, modelId: form.saved.defaultModel }
+    : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -1985,10 +2092,6 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
           <SectionTitle>{t("models.defaultsTitle")}</SectionTitle>
           <span className="config-detail-path">~/.pi/agent/settings.json</span>
         </ConfigDetailHeaderInfo>
-        <ConfigDetailActions>
-          {saving && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{t("i18n.saving")}</span>}
-          {savedOk && !saving && <span style={{ fontSize: 11, color: "#4ade80" }}>{t("i18n.saved")}</span>}
-        </ConfigDetailActions>
       </ConfigDetailHeader>
 
       <p style={{ margin: 0, fontSize: 11, lineHeight: 1.6, color: "var(--text-muted)" }}>
@@ -1998,12 +2101,12 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
       <Field label={t("models.defaultsModel")}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <ModelSelector
-            options={modelList}
+            options={form.modelList}
             value={selectedModel}
-            onChange={(provider, modelId) => void apply({ provider, modelId })}
-            emptyLabel={modelsUnavailable ? t("models.defaultsModelsUnavailable") : t("models.defaultsNoModels")}
+            onChange={form.setModel}
+            emptyLabel={form.modelsUnavailable ? t("models.defaultsModelsUnavailable") : t("models.defaultsNoModels")}
             selectedLabel={selectedModel && !modelKnown ? t("agents.modelUnavailable", { model: `${selectedModel.provider}/${selectedModel.modelId}` }) : undefined}
-            disabled={saving || modelsUnavailable || (modelList.length === 0 && !selectedModel)}
+            disabled={form.saving || form.modelsUnavailable || (form.modelList.length === 0 && !selectedModel)}
             ariaLabel={t("models.defaultsModel")}
             variant="field"
             placement="auto"
@@ -2018,11 +2121,11 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <ConfigSelect
             ariaLabel={t("models.defaultsThinking")}
-            value={displayedLevel}
-            disabled={saving}
+            value={form.displayedLevel}
+            disabled={form.saving}
             icon={THINKING_ICON}
-            onChange={(value) => void apply({ thinkingLevel: value as ThinkingLevel })}
-            options={levelOptions.map((level) => ({
+            onChange={form.setLevel}
+            options={form.levelOptions.map((level) => ({
               value: level,
               label: level,
               description: THINKING_LEVEL_DESC_KEYS[level]
@@ -2031,22 +2134,22 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
             }))}
           />
           <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
-            {pinnedLevel
+            {form.draft.level
               ? t("models.defaultsThinkingPinned")
-              : t("models.defaultsThinkingBuiltin", { level: displayedLevel })}
+              : t("models.defaultsThinkingBuiltin", { level: form.displayedLevel })}
           </span>
         </div>
       </Field>
 
-      {effectiveDefault && selectedModel && (
-        effectiveDefault.provider !== selectedModel.provider || effectiveDefault.modelId !== selectedModel.modelId
+      {!form.dirty && form.effectiveModel && savedModel && (
+        form.effectiveModel.provider !== savedModel.provider || form.effectiveModel.modelId !== savedModel.modelId
       ) && (
         <p style={{ margin: 0, fontSize: 11, color: "var(--text-muted)" }}>
-          {t("models.defaultsEffective", { model: `${effectiveDefault.provider}/${effectiveDefault.modelId}` })}
+          {t("models.defaultsEffective", { model: `${form.effectiveModel.provider}/${form.effectiveModel.modelId}` })}
         </p>
       )}
 
-      {warnings.map((warning) => (
+      {!form.dirty && form.warnings.map((warning) => (
         <p key={warning.code} style={{ margin: 0, fontSize: 11, color: "#fbbf24" }}>
           {t(`models.warning.${warning.code}`, {
             model: warning.model,
@@ -2056,8 +2159,8 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
         </p>
       ))}
 
-      {saveError && (
-        <p role="alert" style={{ margin: 0, fontSize: 11, color: "#f87171" }}>{saveError}</p>
+      {form.saveError && (
+        <p role="alert" style={{ margin: 0, fontSize: 11, color: "#f87171" }}>{form.saveError}</p>
       )}
     </div>
   );
@@ -2085,6 +2188,8 @@ export function ModelsConfig({
   const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([]);
   const [apiKeyProviders, setApiKeyProviders] = useState<ApiKeyProvider[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Fetched only while the defaults pane is selected: the model list is not free.
+  const defaultsForm = useDefaultsForm(cwd, selection?.type === "defaults");
 
   const refreshAuthProviders = useCallback(() => {
     fetch("/api/auth/providers")
@@ -2232,7 +2337,7 @@ export function ModelsConfig({
   // Resolve current detail
   const detailContent = (() => {
     if (!selection) return null;
-    if (selection.type === "defaults") return <DefaultsDetail key="defaults" cwd={cwd} />;
+    if (selection.type === "defaults") return <DefaultsDetail key="defaults" form={defaultsForm} />;
     if (selection.type === "oauth") {
       const p = oauthProviders.find((p) => p.id === selection.providerId);
       if (!p) return null;
@@ -2406,12 +2511,33 @@ export function ModelsConfig({
           </ConfigDetail>
         </ConfigSplitView>
 
-        {/* Footer. The defaults pane applies immediately, so a models.json save
-            button there would only mislead. */}
-        <ConfigFooter status={saveError && <span style={{ color: "#f87171" }}>{saveError}</span>}>
+        {/* Footer. The defaults pane is a form, so its Save button commits the
+            draft instead of models.json. */}
+        <ConfigFooter status={selection?.type === "defaults"
+          ? (defaultsForm.saveError
+            ? <span role="alert" style={{ color: "#f87171" }}>{defaultsForm.saveError}</span>
+            : defaultsForm.saving
+              ? t("i18n.saving")
+              : defaultsForm.savedOk
+                ? <span style={{ color: "#4ade80" }}>{t("i18n.saved")}</span>
+                : defaultsForm.dirty ? t("models.defaultsUnsaved") : null)
+          : (saveError && <span style={{ color: "#f87171" }}>{saveError}</span>)}>
           {!embedded && <ConfigButton onClick={onClose}>{t("i18n.cancel")}</ConfigButton>}
           {selection?.type === "defaults" ? (
-            <span style={{ fontSize: 11, color: "var(--text-dim)" }}>{t("models.defaultsAutoSave")}</span>
+            <ConfigButton
+              variant="primary"
+              onClick={() => void defaultsForm.save()}
+              disabled={defaultsForm.saving || !defaultsForm.dirty}
+              className={defaultsForm.savedOk ? "is-success" : undefined}
+            >
+              {defaultsForm.savedOk && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                  className="config-button-success-icon">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+              <span>{defaultsForm.savedOk ? t("i18n.saved") : defaultsForm.saving ? t("i18n.saving") : t("i18n.save")}</span>
+            </ConfigButton>
           ) : (
           <ConfigButton
             variant="primary"

@@ -187,6 +187,15 @@ test("thinking level overrides keep explicit default, disabled, and custom contr
   assert.match(editor, /state === "string"/);
 });
 
+/**
+ * The defaults pane is a section of ModelsConfig.tsx: `useDefaultsForm` holds the
+ * draft, `DefaultsDetail` renders it, and the shared footer commits it.
+ */
+const defaultsSection = source.slice(
+  source.indexOf("// ── Global startup defaults"),
+  source.indexOf("// ── Main component"),
+);
+
 test("keeps the global startup defaults pane pinned at the top of the sidebar", () => {
   const sidebar = source.slice(source.indexOf("<ConfigSidebar>"), source.indexOf("</ConfigSidebar>"));
   const defaultsEntry = sidebar.indexOf('setSelection({ type: "defaults" })');
@@ -197,53 +206,52 @@ test("keeps the global startup defaults pane pinned at the top of the sidebar", 
     defaultsEntry < firstOAuthEntry,
     "defaults must stay above the credential entries so it cannot be buried",
   );
-  assert.match(source, /selection\.type === "defaults"\) return <DefaultsDetail key="defaults" cwd=\{cwd\} \/>/);
+  assert.match(source, /selection\.type === "defaults"\) return <DefaultsDetail key="defaults" form=\{defaultsForm\} \/>/);
   assert.match(source, /if \(selection\.type === "defaults"\) return \{ type: "defaults" \};/);
 });
 
 test("labels thinking levels with the app's shared level names", () => {
-  const detail = source.slice(
-    source.indexOf("function DefaultsDetail("),
-    source.indexOf("// ── Main component"),
-  );
-
   // The dropdown must read like the composer's reasoning menu, not like raw
   // identifiers in a native select.
   assert.match(source, /import \{ THINKING_LEVEL_DESC_KEYS \} from "@\/lib\/thinking-levels"/);
-  assert.match(detail, /description: THINKING_LEVEL_DESC_KEYS\[level\]/);
-  assert.match(detail, /icon=\{THINKING_ICON\}/);
-  assert.doesNotMatch(detail, /<option key=\{level\}/);
+  assert.match(defaultsSection, /description: THINKING_LEVEL_DESC_KEYS\[level\]/);
+  assert.match(defaultsSection, /icon=\{THINKING_ICON\}/);
+  assert.doesNotMatch(defaultsSection, /<option key=\{level\}/);
 });
 
 test("edits pi's global defaults through the settings API only", () => {
-  const detail = source.slice(
-    source.indexOf("function DefaultsDetail("),
-    source.indexOf("// ── Main component"),
-  );
-
-  assert.match(detail, /fetch\(settingsUrl\)/);
-  assert.match(detail, /const settingsUrl = cwd \? `\/api\/settings\?cwd=/);
-  assert.match(detail, /method: "PUT"/);
+  assert.match(defaultsSection, /fetch\(settingsUrl\)/);
+  assert.match(defaultsSection, /const settingsUrl = cwd \? `\/api\/settings\?cwd=/);
+  assert.match(defaultsSection, /method: "PUT"/);
   // Global writes must never be smuggled through the models.json save button.
-  assert.doesNotMatch(detail, /handleSave/);
-  assert.doesNotMatch(detail, /api\/models-config/);
+  assert.doesNotMatch(defaultsSection, /handleSave/);
+  assert.doesNotMatch(defaultsSection, /api\/models-config/);
   assert.match(source, /selection\?\.type === "defaults" \? \(/);
 });
 
-test("renders thinking-level diagnostics the server judged", () => {
-  const detail = source.slice(
-    source.indexOf("function DefaultsDetail("),
-    source.indexOf("// ── Main component"),
-  );
+test("holds edits in a draft until the footer Save is pressed", () => {
+  // One PUT call site, inside save(); selecting a model or level only touches
+  // the draft, so a half-finished selection never reaches settings.json.
+  assert.equal(defaultsSection.match(/method: "PUT"/g)?.length, 1);
+  assert.match(defaultsSection, /const save = useCallback\(async \(\) => \{/);
+  assert.doesNotMatch(defaultsSection, /setModel = useCallback[\s\S]{0,200}fetch\(/);
+  assert.doesNotMatch(defaultsSection, /setLevel = useCallback[\s\S]{0,200}fetch\(/);
 
+  // The footer button is the only way to commit, and it needs a change.
+  assert.match(source, /selection\?\.type === "defaults" \? \(\s*<ConfigButton\s+variant="primary"\s+onClick=\{\(\) => void defaultsForm\.save\(\)\}\s+disabled=\{defaultsForm\.saving \|\| !defaultsForm\.dirty\}/);
+  assert.match(source, /defaultsForm\.dirty \? t\("models\.defaultsUnsaved"\) : null/);
+});
+
+test("renders thinking-level diagnostics the server judged", () => {
   // The client renders warnings from GET and PUT alike, and never recomputes
   // support from the model list it fetched for the option list.
-  assert.match(detail, /setWarnings\(saved\.warnings \?\? \[\]\)/);
-  assert.match(detail, /setWarnings\(body\.warnings \?\? \[\]\)/);
-  assert.match(detail, /supported: warning\.supported\.join\(", "\)/);
-  assert.doesNotMatch(detail, /levelUnsupported/);
-  assert.doesNotMatch(detail, /getSupportedThinkingLevels/);
-  assert.doesNotMatch(detail, /\/api\/models\?[\s\S]{0,80}warnings/);
+  assert.match(defaultsSection, /setWarnings\(settings\.warnings \?\? \[\]\)/);
+  assert.match(defaultsSection, /setWarnings\(body\.warnings \?\? \[\]\)/);
+  assert.match(defaultsSection, /supported: warning\.supported\.join\(", "\)/);
+  assert.doesNotMatch(defaultsSection, /levelUnsupported/);
+  assert.doesNotMatch(defaultsSection, /getSupportedThinkingLevels/);
+  // Warnings describe what is stored, so they wait for the next save.
+  assert.match(defaultsSection, /\{!form\.dirty && form\.warnings\.map\(/);
 });
 
 test("documents that chat-side selection is session-scoped, not a default", async () => {
@@ -255,6 +263,7 @@ test("documents that chat-side selection is session-scoped, not a default", asyn
     "models.defaultsScope",
     "models.defaultsModel",
     "models.defaultsThinking",
+    "models.defaultsUnsaved",
     "models.warning.unsupported_thinking_level",
   ]) {
     assert.match(enSource, new RegExp(`"${key.replace(/\./g, "\\.")}":`));
@@ -263,12 +272,7 @@ test("documents that chat-side selection is session-scoped, not a default", asyn
 });
 
 test("a superseded defaults save cannot overwrite the newest result", () => {
-  const detail = source.slice(
-    source.indexOf("function DefaultsDetail("),
-    source.indexOf("// ── Main component"),
-  );
-
-  assert.match(detail, /const sequence = \+\+applySequenceRef\.current;/);
-  assert.match(detail, /if \(!isCurrent\(\)\) return;/);
-  assert.match(detail, /if \(isCurrent\(\)\) setSaving\(false\);/);
+  assert.match(defaultsSection, /const sequence = \+\+saveSequenceRef\.current;/);
+  assert.match(defaultsSection, /if \(!isCurrent\(\)\) return;/);
+  assert.match(defaultsSection, /if \(isCurrent\(\)\) setSaving\(false\);/);
 });
