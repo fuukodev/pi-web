@@ -65,6 +65,7 @@ app/api/
   home/route.ts                   GET user home directory
   models/route.ts                 GET { models, modelList, defaultModel }
   models-config/route.ts          GET/PUT — read/write ~/.pi/agent/models.json
+  settings/route.ts               GET/PUT — pi's global default model + thinking level
   models-config/catalog/route.ts  GET models.dev pricing presets
   models-config/discover/route.ts POST fetch a configured provider's upstream model list
   models-config/test/route.ts     POST test a configured model/provider
@@ -82,6 +83,7 @@ lib/
   file-paths.ts        client/server path encoding helpers
   markdown.ts          shared markdown helpers
   npx.ts               npx runner used by skill install
+  pi-settings.ts       read/write pi's global defaultModel/defaultThinkingLevel
   pi-types.ts          local structural types for pi SDK objects
   rpc-manager.ts      AgentSessionWrapper + registry + startRpcSession
   session-reader.ts   SessionManager wrappers + path cache + buildSessionContext adapter
@@ -148,7 +150,11 @@ Tool names are passed at session creation (`POST /api/agent/new` -> `toolNames[]
 The last preset explicitly selected by the user is stored in browser `localStorage` and initializes fresh-session composers only. Existing sessions never trust that preference; they use their live `get_tools` state or pi's default when no wrapper exists.
 
 ### Model defaults for new sessions
-`GET /api/models` returns `defaultModel` read from `~/.pi/agent/settings.json`. `ChatWindow` pre-selects this on mount for new sessions. Explicit browser model/thinking selections are applied atomically during AgentSession construction, then `lib/startup-preferences.ts` persists their effective values without replaying `set_model`/`set_thinking_level`; implicit `enabledModels` fallbacks and thinking pins are not persisted.
+`GET /api/models` returns `defaultModel` resolved from `~/.pi/agent/settings.json` through the `enabledModels` scope. `ChatWindow` pre-selects this on mount for new sessions.
+
+**The chat composer is session-scoped and never writes pi's global defaults.** A model or thinking level picked there is passed as `initialModel`/`thinkingLevel` into AgentSession construction (or replayed as `set_model`/`set_thinking_level` on a live wrapper), which only appends session entries. Nothing in the chat path may call `setDefaultModelAndProvider()` / `setDefaultThinkingLevel()`; that is what `lib/rpc-manager.test.mjs` guards. Consequences to preserve: changing the tools preset on a fresh session must not pin anything either, and a brand-new session always starts from pi's global default unless the browser made an explicit selection at creation time.
+
+Global defaults are edited only from Settings → Models → Defaults (`components/ModelsConfig.tsx` → `app/api/settings/route.ts` → `lib/pi-settings.ts`). The pane is a form: `useDefaultsForm()` holds a draft and only the shared footer's Save button issues the PUT, so a half-finished selection never reaches the file. That route is the single auditable write path: it validates the model against cwd-bound services, reports the *effective* model after scope+auth resolution, writes through the SDK `SettingsManager` (shared lock + field merge with the TUI/CLI), and invalidates the models cache. It is also the only judge of the thinking-level diagnostic — `GET` and `PUT` both return `warnings` computed from the model the level applies to (the requested model, or the saved one when only the level changes), so the panel renders warnings instead of re-deriving thinking-level support from the model list. Unsupported levels are advisory: pi clamps per session, and a saved default that no longer resolves (removed provider, expired auth) must never turn a level change into an error. See `docs/adr/0006-chat-model-selection-vs-global-defaults.md`.
 
 ### `enabledModels` scoping
 The `enabledModels` setting uses pi's `--models` syntax: minimatch globs against `provider/modelId` or a bare `modelId`, fuzzy matching for non-glob patterns, and an optional `:thinkingLevel` suffix. Never compare those patterns as literal strings — `lib/model-scope.ts` delegates to the SDK's `resolveModelScopeWithDiagnostics()` so pi-web and the TUI agree on the visible model list, and falls back to all available models when patterns resolve to nothing. `startRpcSession()` resolves that scope before creating an AgentSession and passes the selected initial model, thinking pin, and SDK-native `scopedModels` atomically; `GET /api/models` reuses the helper only for selector data, `thinkingLevelPins`, and `modelScopeWarnings` display.
