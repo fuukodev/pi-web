@@ -24,14 +24,21 @@ export interface PiGlobalDefaultsUpdate {
 }
 
 /**
- * Non-fatal diagnostics returned when saving defaults. Codes stay stable so the
- * UI owns the wording; `detail` carries the values it interpolates.
+ * Non-fatal diagnostics for a saved default configuration.
+ *
+ * The server is the only judge of these: it resolves the model and its
+ * supported thinking levels, so a client never has to re-derive support from
+ * the model list. The UI owns only the wording.
  */
 export type SettingsWarningCode = "unsupported_thinking_level";
 
 export interface SettingsWarning {
   code: SettingsWarningCode;
-  detail: string;
+  /** `provider/modelId` the warning is about. */
+  model: string;
+  level: ThinkingLevel;
+  /** Levels the model does accept, for the message. */
+  supported: readonly string[];
 }
 
 export const PI_THINKING_LEVELS: readonly ThinkingLevel[] = [

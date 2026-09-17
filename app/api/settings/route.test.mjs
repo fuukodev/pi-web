@@ -16,7 +16,10 @@ writeFileSync(join(agentDir, "models.json"), JSON.stringify({
       api: "openai-completions",
       baseUrl: "https://acme.example.test/v1",
       apiKey: "test-key",
-      models: [{ id: "acme-large", name: "Acme Large", reasoning: true }],
+      models: [
+        { id: "acme-large", name: "Acme Large", reasoning: true },
+        { id: "acme-small", name: "Acme Small", reasoning: true },
+      ],
     },
   },
 }, null, 2), "utf8");
@@ -37,6 +40,12 @@ after(() => {
   rmSync(cwd, { recursive: true, force: true });
 });
 
+function get(search = "") {
+  return GET(new Request(`http://localhost/api/settings${search}`, {
+    headers: { Host: "localhost" },
+  }));
+}
+
 function put(body, contentType = "application/json") {
   return PUT(new Request("http://localhost/api/settings", {
     method: "PUT",
@@ -50,7 +59,7 @@ function readSettings() {
 }
 
 test("GET reports unset defaults before anything is saved", async () => {
-  const response = await GET();
+  const response = await get();
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     defaultProvider: null,
@@ -101,9 +110,55 @@ test("PUT warns when the selected model does not support the thinking level", as
   const response = await put({ provider: "acme", modelId: "acme-large", thinkingLevel: "max", cwd });
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.deepEqual(body.warnings?.map((warning) => warning.code), ["unsupported_thinking_level"]);
-  assert.match(body.warnings[0].detail, /high/);
+  assert.equal(body.warnings?.length, 1);
+  assert.equal(body.warnings[0].code, "unsupported_thinking_level");
+  assert.equal(body.warnings[0].model, "acme/acme-large");
+  assert.equal(body.warnings[0].level, "max");
+  assert.ok(body.warnings[0].supported.includes("high"));
+  assert.ok(!body.warnings[0].supported.includes("max"));
   assert.equal(readSettings().defaultThinkingLevel, "max");
+});
+
+test("a model change alone reports the pinned level the saved default cannot take", async () => {
+  // "max" is already pinned; selecting a model that cannot take it must warn
+  // without the client comparing thinking-level lists itself.
+  const response = await put({ provider: "acme", modelId: "acme-small", cwd });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.warnings?.map((warning) => warning.code), ["unsupported_thinking_level"]);
+  assert.equal(body.warnings[0].model, "acme/acme-small");
+  assert.equal(body.warnings[0].level, "max");
+
+  await put({ provider: "acme", modelId: "acme-large", cwd });
+});
+
+test("a thinking-level-only change is judged against the saved model", async () => {
+  const response = await put({ thinkingLevel: "max", cwd });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.warnings?.map((warning) => warning.code), ["unsupported_thinking_level"]);
+  assert.equal(body.warnings[0].model, "acme/acme-large");
+
+  const supported = await put({ thinkingLevel: "high", cwd });
+  assert.deepEqual((await supported.json()).warnings, undefined);
+});
+
+test("an unresolvable saved default never blocks a thinking-level change", async () => {
+  const original = readSettings();
+  writeFileSync(join(agentDir, "settings.json"), JSON.stringify({
+    ...original,
+    defaultProvider: "gone",
+    defaultModel: "gone-model",
+  }, null, 2), "utf8");
+
+  const response = await put({ thinkingLevel: "low", cwd });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.defaultThinkingLevel, "low");
+  assert.equal(body.defaultProvider, "gone");
+  assert.deepEqual(body.warnings, undefined);
+
+  writeFileSync(join(agentDir, "settings.json"), JSON.stringify(original, null, 2), "utf8");
 });
 
 test("PUT accepts a thinking-level-only change and keeps the model", async () => {
@@ -122,10 +177,29 @@ test("PUT accepts a thinking-level-only change and keeps the model", async () =>
 });
 
 test("GET reflects the saved defaults", async () => {
-  const response = await GET();
+  const response = await get();
   assert.deepEqual(await response.json(), {
     defaultProvider: "acme",
     defaultModel: "acme-large",
     defaultThinkingLevel: "low",
   });
+});
+
+test("GET reports warnings for the saved defaults", async () => {
+  await put({ provider: "acme", modelId: "acme-large", thinkingLevel: "max", cwd });
+
+  const response = await get(`?cwd=${encodeURIComponent(cwd)}`);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.defaultModel, "acme-large");
+  assert.deepEqual(body.warnings?.map((warning) => warning.code), ["unsupported_thinking_level"]);
+  assert.equal(body.warnings[0].level, "max");
+  assert.ok(body.warnings[0].supported.includes("high"));
+  assert.ok(!body.warnings[0].supported.includes("max"));
+
+  // A read must survive an unusable cwd: no warnings, no failure, no project
+  // extension execution.
+  const denied = await get(`?cwd=${encodeURIComponent(tmpdir())}`);
+  assert.equal(denied.status, 200);
+  assert.deepEqual((await denied.json()).warnings, undefined);
 });

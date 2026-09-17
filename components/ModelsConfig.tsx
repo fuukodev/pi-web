@@ -1835,6 +1835,7 @@ interface PiGlobalDefaultsPayload {
   defaultProvider: string | null;
   defaultModel: string | null;
   defaultThinkingLevel: ThinkingLevel | null;
+  warnings?: SettingsWarning[];
 }
 
 interface DefaultsModelsPayload {
@@ -1868,11 +1869,14 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
   useEffect(() => {
     let cancelled = false;
     const modelsUrl = cwd ? `/api/models?cwd=${encodeURIComponent(cwd)}` : "/api/models";
+    const settingsUrl = cwd ? `/api/settings?cwd=${encodeURIComponent(cwd)}` : "/api/settings";
     setLoading(true);
     setLoadError(null);
 
     Promise.all([
-      fetch("/api/settings").then(async (res) => {
+      // Warnings come from the server for both the saved state and every save, so
+      // the client never re-derives thinking-level support itself.
+      fetch(settingsUrl).then(async (res) => {
         const body = await res.json().catch(() => null) as PiGlobalDefaultsPayload & { error?: string } | null;
         if (!res.ok || !body) throw new Error(body?.error ?? `HTTP ${res.status}`);
         return body;
@@ -1886,6 +1890,7 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
       .then(([saved, models]) => {
         if (cancelled) return;
         setDefaults(saved);
+        setWarnings(saved.warnings ?? []);
         setModelList((models?.modelList ?? []).map((model) => ({
           provider: model.provider,
           modelId: model.id,
@@ -1952,7 +1957,6 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
   const pinnedLevel = defaults?.defaultThinkingLevel ?? null;
   const displayedLevel: ThinkingLevel = pinnedLevel ?? PI_BUILTIN_THINKING_LEVEL;
   const levelOptions = Array.from(new Set<string>([...supportedLevels, displayedLevel])) as ThinkingLevel[];
-  const levelUnsupported = pinnedLevel !== null && !supportedLevels.includes(pinnedLevel);
   const modelKnown = selectedModel
     ? modelList.some((model) => model.provider === selectedModel.provider && model.modelId === selectedModel.modelId)
     : false;
@@ -2017,11 +2021,6 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
               ? t("models.defaultsThinkingPinned")
               : t("models.defaultsThinkingBuiltin", { level: displayedLevel })}
           </span>
-          {levelUnsupported && (
-            <span style={{ fontSize: 11, color: "#fbbf24" }}>
-              {t("models.defaultsThinkingUnsupported", { model: selectedKey ?? "", levels: supportedLevels.join(", ") })}
-            </span>
-          )}
         </div>
       </Field>
 
@@ -2035,7 +2034,11 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
 
       {warnings.map((warning) => (
         <p key={warning.code} style={{ margin: 0, fontSize: 11, color: "#fbbf24" }}>
-          {t(`models.warning.${warning.code}`, { detail: warning.detail })}
+          {t(`models.warning.${warning.code}`, {
+            model: warning.model,
+            level: warning.level,
+            supported: warning.supported.join(", "),
+          })}
         </p>
       ))}
 

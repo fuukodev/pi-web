@@ -52,9 +52,15 @@ actions. Pi Web has one control, so it can only honestly implement the first.
 - The defaults panel reports the **effective** model (`effectiveModel`) after
   `enabledModels` scope and provider auth are applied, because a saved default
   that is out of scope or unauthenticated is silently skipped at startup.
-- Thinking levels are validated against the supported set of the selected
-  model, but never rejected: pi clamps per model at session start, so a global
-  level that one model does not support is a warning, not an error.
+- Thinking-level support is judged on the **server** only. `GET /api/settings`
+  and `PUT /api/settings` both return `warnings` for the model the level applies
+  to — the requested model, or the saved one when only the level changes. The
+  panel renders them and never compares thinking-level lists itself; the list it
+  fetches from `/api/models` only fills the select's options.
+- Thinking levels are advisory, never blocking: pi clamps per model at session
+  start, and a saved default that no longer resolves (removed provider, expired
+  auth) must not turn a legitimate level change into an error. Warnings skip that
+  case instead.
 - Pi Web is not the only writer of `settings.json`: the PowerShell tool setting
   (`defaultTools`), package management, and the `pi` CLI/TUI all write it too.
   The SDK `SettingsManager` is used here for its shared lock and field-level

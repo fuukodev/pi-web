@@ -207,12 +207,29 @@ test("edits pi's global defaults through the settings API only", () => {
     source.indexOf("// ── Main component"),
   );
 
-  assert.match(detail, /fetch\("\/api\/settings"\)/);
+  assert.match(detail, /fetch\(settingsUrl\)/);
+  assert.match(detail, /const settingsUrl = cwd \? `\/api\/settings\?cwd=/);
   assert.match(detail, /method: "PUT"/);
   // Global writes must never be smuggled through the models.json save button.
   assert.doesNotMatch(detail, /handleSave/);
   assert.doesNotMatch(detail, /api\/models-config/);
   assert.match(source, /selection\?\.type === "defaults" \? \(/);
+});
+
+test("renders thinking-level diagnostics the server judged", () => {
+  const detail = source.slice(
+    source.indexOf("function DefaultsDetail("),
+    source.indexOf("// ── Main component"),
+  );
+
+  // The client renders warnings from GET and PUT alike, and never recomputes
+  // support from the model list it fetched for the option list.
+  assert.match(detail, /setWarnings\(saved\.warnings \?\? \[\]\)/);
+  assert.match(detail, /setWarnings\(body\.warnings \?\? \[\]\)/);
+  assert.match(detail, /supported: warning\.supported\.join\(", "\)/);
+  assert.doesNotMatch(detail, /levelUnsupported/);
+  assert.doesNotMatch(detail, /getSupportedThinkingLevels/);
+  assert.doesNotMatch(detail, /\/api\/models\?[\s\S]{0,80}warnings/);
 });
 
 test("documents that chat-side selection is session-scoped, not a default", async () => {
