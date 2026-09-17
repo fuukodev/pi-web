@@ -186,3 +186,47 @@ test("thinking level overrides keep explicit default, disabled, and custom contr
   assert.match(editor, /state === "null"/);
   assert.match(editor, /state === "string"/);
 });
+
+test("keeps the global startup defaults pane pinned at the top of the sidebar", () => {
+  const sidebar = source.slice(source.indexOf("<ConfigSidebar>"), source.indexOf("</ConfigSidebar>"));
+  const defaultsEntry = sidebar.indexOf('setSelection({ type: "defaults" })');
+  const firstOAuthEntry = sidebar.indexOf('setSelection({ type: "oauth"');
+
+  assert.ok(defaultsEntry > 0, "defaults sidebar entry is missing");
+  assert.ok(
+    defaultsEntry < firstOAuthEntry,
+    "defaults must stay above the credential entries so it cannot be buried",
+  );
+  assert.match(source, /selection\.type === "defaults"\) return <DefaultsDetail key="defaults" cwd=\{cwd\} \/>/);
+  assert.match(source, /if \(selection\.type === "defaults"\) return \{ type: "defaults" \};/);
+});
+
+test("edits pi's global defaults through the settings API only", () => {
+  const detail = source.slice(
+    source.indexOf("function DefaultsDetail("),
+    source.indexOf("// ── Main component"),
+  );
+
+  assert.match(detail, /fetch\("\/api\/settings"\)/);
+  assert.match(detail, /method: "PUT"/);
+  // Global writes must never be smuggled through the models.json save button.
+  assert.doesNotMatch(detail, /handleSave/);
+  assert.doesNotMatch(detail, /api\/models-config/);
+  assert.match(source, /selection\?\.type === "defaults" \? \(/);
+});
+
+test("documents that chat-side selection is session-scoped, not a default", async () => {
+  const enSource = await readFile(new URL("../lib/i18n/messages/en.ts", import.meta.url), "utf8");
+  const zhSource = await readFile(new URL("../lib/i18n/messages/zh-CN.ts", import.meta.url), "utf8");
+
+  for (const key of [
+    "models.defaultsTitle",
+    "models.defaultsScope",
+    "models.defaultsModel",
+    "models.defaultsThinking",
+    "models.warning.unsupported_thinking_level",
+  ]) {
+    assert.match(enSource, new RegExp(`"${key.replace(/\./g, "\\.")}":`));
+    assert.match(zhSource, new RegExp(`"${key.replace(/\./g, "\\.")}":`));
+  }
+});

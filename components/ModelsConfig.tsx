@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useI18n } from "@/hooks/useI18n";
+import { ModelSelector, type ModelSelectorOption } from "./ModelSelector";
+import type { SettingsWarning } from "@/lib/pi-settings";
 import type { ModelCatalogPreset, ModelCatalogRecommendation } from "@/lib/model-catalog";
 import type { DiscoveredModel } from "@/lib/model-discovery";
 import {
@@ -120,6 +122,7 @@ type ModelCatalogState =
   | { phase: "error"; message: string };
 
 type Selection =
+  | { type: "defaults" }
   | { type: "provider"; name: string }
   | { type: "model"; providerName: string; index: number }
   | { type: "oauth"; providerId: string }
@@ -132,6 +135,7 @@ function readRememberedSelection(): Selection | null {
     const value: unknown = JSON.parse(raw);
     if (value === null || typeof value !== "object") return null;
     const selection = value as Record<string, unknown>;
+    if (selection.type === "defaults") return { type: "defaults" };
     if (selection.type === "provider" && typeof selection.name === "string") {
       return { type: "provider", name: selection.name };
     }
@@ -153,6 +157,7 @@ function readRememberedSelection(): Selection | null {
 }
 
 function customSelectionExists(config: ModelsJson, selection: Selection): boolean {
+  if (selection.type === "defaults") return true;
   if (selection.type === "provider") return Boolean(config.providers?.[selection.name]);
   if (selection.type !== "model") return true;
   return Boolean(config.providers?.[selection.providerName]?.models?.[selection.index]);
@@ -1820,9 +1825,232 @@ function AddProviderPicker({
   );
 }
 
+// ── Global startup defaults ───────────────────────────────────────────────────
+
+/** pi's built-in thinking default (SDK: core/defaults.js DEFAULT_THINKING_LEVEL). */
+const PI_BUILTIN_THINKING_LEVEL: ThinkingLevel = "medium";
+
+interface PiGlobalDefaultsPayload {
+  defaultProvider: string | null;
+  defaultModel: string | null;
+  defaultThinkingLevel: ThinkingLevel | null;
+}
+
+interface DefaultsModelsPayload {
+  modelList?: { id: string; name: string; provider: string }[];
+  thinkingLevels?: Record<string, string[]>;
+  defaultModel?: { provider: string; modelId: string } | null;
+}
+
+/**
+ * Edits pi's global startup defaults explicitly.
+ *
+ * Everything here is global: it changes what the `pi` CLI/TUI starts with, not
+ * just Pi Web. The chat composer is deliberately session-scoped, so this panel
+ * is the only place Pi Web writes these fields.
+ */
+function DefaultsDetail({ cwd }: { cwd?: string | null }) {
+  const { t } = useI18n();
+  const [defaults, setDefaults] = useState<PiGlobalDefaultsPayload | null>(null);
+  const [modelList, setModelList] = useState<ModelSelectorOption[]>([]);
+  const [thinkingLevels, setThinkingLevels] = useState<Record<string, string[]>>({});
+  const [effectiveDefault, setEffectiveDefault] = useState<{ provider: string; modelId: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [modelsUnavailable, setModelsUnavailable] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedOk, setSavedOk] = useState(false);
+  const [warnings, setWarnings] = useState<SettingsWarning[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const modelsUrl = cwd ? `/api/models?cwd=${encodeURIComponent(cwd)}` : "/api/models";
+    setLoading(true);
+    setLoadError(null);
+
+    Promise.all([
+      fetch("/api/settings").then(async (res) => {
+        const body = await res.json().catch(() => null) as PiGlobalDefaultsPayload & { error?: string } | null;
+        if (!res.ok || !body) throw new Error(body?.error ?? `HTTP ${res.status}`);
+        return body;
+      }),
+      // The model list only shapes the selector and the thinking-level options.
+      // Its failure must not hide the saved values.
+      fetch(modelsUrl)
+        .then((res) => (res.ok ? res.json() as Promise<DefaultsModelsPayload> : null))
+        .catch(() => null),
+    ])
+      .then(([saved, models]) => {
+        if (cancelled) return;
+        setDefaults(saved);
+        setModelList((models?.modelList ?? []).map((model) => ({
+          provider: model.provider,
+          modelId: model.id,
+          name: model.name,
+        })));
+        setThinkingLevels(models?.thinkingLevels ?? {});
+        setEffectiveDefault(models?.defaultModel ?? null);
+        setModelsUnavailable(!models);
+      })
+      .catch((error) => {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [cwd]);
+
+  const apply = useCallback(async (update: {
+    provider?: string;
+    modelId?: string;
+    thinkingLevel?: ThinkingLevel;
+  }) => {
+    setSaving(true);
+    setSaveError(null);
+    setSavedOk(false);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...update, ...(cwd ? { cwd } : {}) }),
+      });
+      const body = await res.json().catch(() => null) as
+        (PiGlobalDefaultsPayload & {
+          effectiveModel?: { provider: string; modelId: string } | null;
+          warnings?: SettingsWarning[];
+          error?: string;
+        }) | null;
+      if (!res.ok || !body || body.error) throw new Error(body?.error ?? `HTTP ${res.status}`);
+      setDefaults(body);
+      if (body.effectiveModel !== undefined) setEffectiveDefault(body.effectiveModel);
+      setWarnings(body.warnings ?? []);
+      setSavedOk(true);
+      setTimeout(() => setSavedOk(false), 2000);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  }, [cwd]);
+
+  const selectedModel = defaults?.defaultProvider && defaults.defaultModel
+    ? { provider: defaults.defaultProvider, modelId: defaults.defaultModel }
+    : null;
+  const selectedKey = selectedModel ? `${selectedModel.provider}:${selectedModel.modelId}` : null;
+  const supportedLevels = (selectedKey ? thinkingLevels[selectedKey] : undefined) ?? [...THINKING_LEVELS];
+  const pinnedLevel = defaults?.defaultThinkingLevel ?? null;
+  const displayedLevel: ThinkingLevel = pinnedLevel ?? PI_BUILTIN_THINKING_LEVEL;
+  const levelOptions = Array.from(new Set<string>([...supportedLevels, displayedLevel])) as ThinkingLevel[];
+  const levelUnsupported = pinnedLevel !== null && !supportedLevels.includes(pinnedLevel);
+  const modelKnown = selectedModel
+    ? modelList.some((model) => model.provider === selectedModel.provider && model.modelId === selectedModel.modelId)
+    : false;
+
+  if (loading) {
+    return <ConfigEmptyState>{t("i18n.loading")}</ConfigEmptyState>;
+  }
+  if (loadError || !defaults) {
+    return <ConfigEmptyState>{loadError ?? t("models.defaultsUnavailable")}</ConfigEmptyState>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <ConfigDetailHeader>
+        <ConfigDetailHeaderInfo>
+          <SectionTitle>{t("models.defaultsTitle")}</SectionTitle>
+          <span className="config-detail-path">~/.pi/agent/settings.json</span>
+        </ConfigDetailHeaderInfo>
+        <ConfigDetailActions>
+          {saving && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{t("i18n.saving")}</span>}
+          {savedOk && !saving && <span style={{ fontSize: 11, color: "#4ade80" }}>{t("i18n.saved")}</span>}
+        </ConfigDetailActions>
+      </ConfigDetailHeader>
+
+      <p style={{ margin: 0, fontSize: 11, lineHeight: 1.6, color: "var(--text-muted)" }}>
+        {t("models.defaultsScope")}
+      </p>
+
+      <Field label={t("models.defaultsModel")}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <ModelSelector
+            options={modelList}
+            value={selectedModel}
+            onChange={(provider, modelId) => void apply({ provider, modelId })}
+            emptyLabel={modelsUnavailable ? t("models.defaultsModelsUnavailable") : t("models.defaultsNoModels")}
+            selectedLabel={selectedModel && !modelKnown ? t("agents.modelUnavailable", { model: `${selectedModel.provider}/${selectedModel.modelId}` }) : undefined}
+            disabled={saving || modelsUnavailable || (modelList.length === 0 && !selectedModel)}
+            ariaLabel={t("models.defaultsModel")}
+            variant="field"
+            placement="auto"
+          />
+          {!selectedModel && (
+            <span style={{ fontSize: 11, color: "var(--text-dim)" }}>{t("models.defaultsModelUnset")}</span>
+          )}
+        </div>
+      </Field>
+
+      <Field label={t("models.defaultsThinking")}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <select
+            aria-label={t("models.defaultsThinking")}
+            value={displayedLevel}
+            disabled={saving}
+            onChange={(event) => void apply({ thinkingLevel: event.target.value as ThinkingLevel })}
+            style={inputStyle}
+          >
+            {levelOptions.map((level) => (
+              <option key={level} value={level}>{level}</option>
+            ))}
+          </select>
+          <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
+            {pinnedLevel
+              ? t("models.defaultsThinkingPinned")
+              : t("models.defaultsThinkingBuiltin", { level: displayedLevel })}
+          </span>
+          {levelUnsupported && (
+            <span style={{ fontSize: 11, color: "#fbbf24" }}>
+              {t("models.defaultsThinkingUnsupported", { model: selectedKey ?? "", levels: supportedLevels.join(", ") })}
+            </span>
+          )}
+        </div>
+      </Field>
+
+      {effectiveDefault && selectedModel && (
+        effectiveDefault.provider !== selectedModel.provider || effectiveDefault.modelId !== selectedModel.modelId
+      ) && (
+        <p style={{ margin: 0, fontSize: 11, color: "var(--text-muted)" }}>
+          {t("models.defaultsEffective", { model: `${effectiveDefault.provider}/${effectiveDefault.modelId}` })}
+        </p>
+      )}
+
+      {warnings.map((warning) => (
+        <p key={warning.code} style={{ margin: 0, fontSize: 11, color: "#fbbf24" }}>
+          {t(`models.warning.${warning.code}`, { detail: warning.detail })}
+        </p>
+      ))}
+
+      {saveError && (
+        <p role="alert" style={{ margin: 0, fontSize: 11, color: "#f87171" }}>{saveError}</p>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function ModelsConfig({ onClose, embedded = false }: { onClose: () => void; embedded?: boolean }) {
+export function ModelsConfig({
+  onClose,
+  embedded = false,
+  cwd = null,
+}: {
+  onClose: () => void;
+  embedded?: boolean;
+  /** Used only to resolve the model list for the global defaults panel. */
+  cwd?: string | null;
+}) {
   const { t } = useI18n();
   const [config, setConfig] = useState<ModelsJson>({ providers: {} });
   const [loading, setLoading] = useState(true);
@@ -1980,6 +2208,7 @@ export function ModelsConfig({ onClose, embedded = false }: { onClose: () => voi
   // Resolve current detail
   const detailContent = (() => {
     if (!selection) return null;
+    if (selection.type === "defaults") return <DefaultsDetail key="defaults" cwd={cwd} />;
     if (selection.type === "oauth") {
       const p = oauthProviders.find((p) => p.id === selection.providerId);
       if (!p) return null;
@@ -2030,6 +2259,23 @@ export function ModelsConfig({ onClose, embedded = false }: { onClose: () => voi
           {/* Left: tree */}
           <ConfigSidebar>
             <ConfigSidebarList>
+              {/* Global startup defaults — the only place Pi Web writes pi's
+                  defaultModel/defaultThinkingLevel, so it stays at the top. */}
+              <ConfigSidebarItem
+                active={selection?.type === "defaults"}
+                onClick={() => setSelection({ type: "defaults" })}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-dim)", flexShrink: 0 }}>
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                <ConfigSidebarText className="is-grow">{t("models.defaultsTitle")}</ConfigSidebarText>
+              </ConfigSidebarItem>
+
+              {/* Divider before credentials, only when there are entries below */}
+              {(activeOAuth.length > 0 || activeApiKey.length > 0 || providers.length > 0) && (
+                <div style={{ margin: "4px 8px", borderTop: "1px solid var(--border)" }} />
+              )}
+
               {/* Active OAuth subscriptions */}
               {activeOAuth.map((p) => {
                 const isSelected = selection?.type === "oauth" && selection.providerId === p.id;
@@ -2136,9 +2382,13 @@ export function ModelsConfig({ onClose, embedded = false }: { onClose: () => voi
           </ConfigDetail>
         </ConfigSplitView>
 
-        {/* Footer */}
+        {/* Footer. The defaults pane applies immediately, so a models.json save
+            button there would only mislead. */}
         <ConfigFooter status={saveError && <span style={{ color: "#f87171" }}>{saveError}</span>}>
           {!embedded && <ConfigButton onClick={onClose}>{t("i18n.cancel")}</ConfigButton>}
+          {selection?.type === "defaults" ? (
+            <span style={{ fontSize: 11, color: "var(--text-dim)" }}>{t("models.defaultsAutoSave")}</span>
+          ) : (
           <ConfigButton
             variant="primary"
             onClick={handleSave}
@@ -2153,6 +2403,7 @@ export function ModelsConfig({ onClose, embedded = false }: { onClose: () => voi
             )}
              <span>{savedOk ? t("i18n.saved") : saving ? t("i18n.saving") : t("i18n.save")}</span>
           </ConfigButton>
+          )}
         </ConfigFooter>
     </ConfigPanelShell>
     {pickerOpen && (
