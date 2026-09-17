@@ -639,7 +639,7 @@ export const zhCNLocale: LocalePlugin = {
     "models.developerRole": "使用 developer role 传递系统提示词",
     "models.thinkingLevelMap": "思考等级映射",
     "models.clearAll": "全部清除",
-    "models.defaultsTitle": "启动默认值",
+    "models.defaultsTitle": "默认值",
     "models.defaultsScope": "这些值保存在 pi 的全局设置中，作用于每个新的 pi 会话（包括 pi CLI/TUI）。在聊天中切换模型只影响当前会话。",
     "models.defaultsModel": "默认模型",
     "models.defaultsModelUnset": "尚未设置默认模型，pi 会从 enabledModels 范围中选择。",

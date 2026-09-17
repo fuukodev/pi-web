@@ -639,7 +639,7 @@ export const enLocale: LocalePlugin = {
     "models.developerRole": "Use the developer role for the system prompt",
     "models.thinkingLevelMap": "Thinking level map",
     "models.clearAll": "Clear all",
-    "models.defaultsTitle": "Startup defaults",
+    "models.defaultsTitle": "Defaults",
     "models.defaultsScope": "Stored in pi's global settings, these apply to every new pi session, including the pi CLI and TUI. Switching the model in a chat only affects that session.",
     "models.defaultsModel": "Default model",
     "models.defaultsModelUnset": "No default model is set; pi picks one from the enabledModels scope.",

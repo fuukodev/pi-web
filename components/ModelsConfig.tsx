@@ -34,6 +34,7 @@ import {
   ConfigListAction,
   ConfigPanelShell,
   ConfigSectionTitle,
+  ConfigSelect,
   ConfigSidebar,
   ConfigSidebarItem,
   ConfigSidebarList,
@@ -2001,17 +2002,16 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
 
       <Field label={t("models.defaultsThinking")}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <select
-            aria-label={t("models.defaultsThinking")}
+          <ConfigSelect
+            ariaLabel={t("models.defaultsThinking")}
             value={displayedLevel}
             disabled={saving}
-            onChange={(event) => void apply({ thinkingLevel: event.target.value as ThinkingLevel })}
-            style={inputStyle}
+            onChange={(value) => void apply({ thinkingLevel: value as ThinkingLevel })}
           >
             {levelOptions.map((level) => (
               <option key={level} value={level}>{level}</option>
             ))}
-          </select>
+          </ConfigSelect>
           <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
             {pinnedLevel
               ? t("models.defaultsThinkingPinned")
