@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useI18n } from "@/hooks/useI18n";
+import { ConfigSelect } from "./ConfigSelect";
 import { ModelSelector, type ModelSelectorOption } from "./ModelSelector";
+import { THINKING_LEVEL_DESC_KEYS } from "@/lib/thinking-levels";
 import type { SettingsWarning } from "@/lib/pi-settings";
 import type { ModelCatalogPreset, ModelCatalogRecommendation } from "@/lib/model-catalog";
 import type { DiscoveredModel } from "@/lib/model-discovery";
@@ -34,7 +36,6 @@ import {
   ConfigListAction,
   ConfigPanelShell,
   ConfigSectionTitle,
-  ConfigSelect,
   ConfigSidebar,
   ConfigSidebarItem,
   ConfigSidebarList,
@@ -1831,6 +1832,15 @@ function AddProviderPicker({
 /** pi's built-in thinking default (SDK: core/defaults.js DEFAULT_THINKING_LEVEL). */
 const PI_BUILTIN_THINKING_LEVEL: ThinkingLevel = "medium";
 
+/** The chat composer's reasoning glyph, so both thinking controls read alike. */
+const THINKING_ICON = (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
+    <path d="M9.5 2A5.5 5.5 0 0 0 4 7.5c0 1.7.78 3.21 2 4.21V14a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-2.29c1.22-1 2-2.51 2-4.21A5.5 5.5 0 0 0 9.5 2z" />
+    <line x1="7" y1="18" x2="12" y2="18" />
+    <line x1="8" y1="21" x2="11" y2="21" />
+  </svg>
+);
+
 interface PiGlobalDefaultsPayload {
   defaultProvider: string | null;
   defaultModel: string | null;
@@ -2010,12 +2020,16 @@ function DefaultsDetail({ cwd }: { cwd?: string | null }) {
             ariaLabel={t("models.defaultsThinking")}
             value={displayedLevel}
             disabled={saving}
+            icon={THINKING_ICON}
             onChange={(value) => void apply({ thinkingLevel: value as ThinkingLevel })}
-          >
-            {levelOptions.map((level) => (
-              <option key={level} value={level}>{level}</option>
-            ))}
-          </ConfigSelect>
+            options={levelOptions.map((level) => ({
+              value: level,
+              label: level,
+              description: THINKING_LEVEL_DESC_KEYS[level]
+                ? t(THINKING_LEVEL_DESC_KEYS[level])
+                : undefined,
+            }))}
+          />
           <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
             {pinnedLevel
               ? t("models.defaultsThinkingPinned")

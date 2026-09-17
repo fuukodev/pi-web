@@ -201,6 +201,20 @@ test("keeps the global startup defaults pane pinned at the top of the sidebar", 
   assert.match(source, /if \(selection\.type === "defaults"\) return \{ type: "defaults" \};/);
 });
 
+test("labels thinking levels with the app's shared level names", () => {
+  const detail = source.slice(
+    source.indexOf("function DefaultsDetail("),
+    source.indexOf("// ── Main component"),
+  );
+
+  // The dropdown must read like the composer's reasoning menu, not like raw
+  // identifiers in a native select.
+  assert.match(source, /import \{ THINKING_LEVEL_DESC_KEYS \} from "@\/lib\/thinking-levels"/);
+  assert.match(detail, /description: THINKING_LEVEL_DESC_KEYS\[level\]/);
+  assert.match(detail, /icon=\{THINKING_ICON\}/);
+  assert.doesNotMatch(detail, /<option key=\{level\}/);
+});
+
 test("edits pi's global defaults through the settings API only", () => {
   const detail = source.slice(
     source.indexOf("function DefaultsDetail("),

@@ -373,42 +373,116 @@
   width: 100%;
   min-width: 0;
 }
-.config-select {
-  display: block;
-  appearance: none;
+.config-select-button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   width: 100%;
+  min-width: 0;
   height: 34px;
-  padding: 0 30px 0 9px;
+  padding: 0 9px;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 5px;
   outline: none;
   background: var(--bg);
   color: var(--text);
+  cursor: pointer;
   font-family: inherit;
   font-size: 12px;
   text-align: left;
-  cursor: pointer;
   transition: background-color 0.12s ease;
 }
-.config-select:not(:disabled):hover {
+.config-select-button:not(:disabled):hover,
+.config-select-button.is-open {
   background: var(--bg-hover);
 }
-.config-select:focus-visible {
+.config-select-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
-.config-select:disabled {
+.config-select-button:disabled {
   background: var(--bg-panel);
   color: var(--text-dim);
   cursor: default;
 }
+.config-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .config-select-chevron {
-  position: absolute;
-  top: 50%;
-  right: 9px;
-  transform: translateY(-50%);
+  flex-shrink: 0;
   color: var(--text-dim);
-  pointer-events: none;
+}
+.config-select-popup {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.config-select-popup.is-down {
+  top: calc(100% + 6px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+.config-select-popup.is-up {
+  bottom: calc(100% + 6px);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
+}
+.config-select-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+/* Focus is moved into the list on open, so rows indicate state with background
+   instead of the browser's default ring (the trigger keeps the accent ring). */
+.config-select-option:not(.is-active):hover,
+.config-select-option:not(.is-active):focus-visible {
+  background: var(--bg-hover);
+}
+.config-select-option.is-active {
+  background: var(--bg-selected);
+  color: var(--text);
+  font-weight: 600;
+}
+.config-select-check {
+  flex-shrink: 0;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+}
+.config-select-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.config-select-option-description {
+  flex: 1;
+  margin-left: 8px;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 400;
+  text-align: right;
+  text-overflow: ellipsis;
 }
 
 /* Keep the native resize corner usable when the global scrollbar is present. */

@@ -169,49 +169,6 @@ export function ConfigEmptyState({ children }: { children: ReactNode }) {
   return <div className="config-empty-state">{children}</div>;
 }
 
-/**
- * Native select styled as a config field.
- *
- * Keeps the keyboard and form semantics of a real select while matching the
- * ModelSelector field surface (34px, `--bg`, chevron) so two adjacent fields in
- * the same detail pane cannot look like different design systems.
- */
-export function ConfigSelect({ value, onChange, children, disabled = false, ariaLabel }: {
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
-  disabled?: boolean;
-  ariaLabel: string;
-}) {
-  return (
-    <div className="config-select-field">
-      <select
-        className="config-select"
-        aria-label={ariaLabel}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {children}
-      </select>
-      <svg
-        className="config-select-chevron"
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <polyline points="6 9 12 15 18 9" />
-      </svg>
-    </div>
-  );
-}
-
 export function ConfigDetail({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
     <div className="config-detail" style={style}>
