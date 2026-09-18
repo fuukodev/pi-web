@@ -15,6 +15,7 @@ import {
 } from "@/lib/pi-settings";
 import { projectTrustReloadOptions } from "@/lib/project-trust";
 import { withPiWebBuiltInExtensions } from "@/lib/pi-web-extensions";
+import { refreshPiWebLlamaModels } from "@/lib/pi-web-llama";
 import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
@@ -83,6 +84,7 @@ async function resolveModel(cwd: string, ref: ModelRef): Promise<ResolvedModel> 
     resourceLoaderOptions: withPiWebBuiltInExtensions({}),
     ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
   });
+  await refreshPiWebLlamaModels(services.modelRuntime);
 
   let model = services.modelRuntime.getModel(ref.provider, ref.modelId);
   if (!model) {

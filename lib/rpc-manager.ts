@@ -42,6 +42,7 @@ import { isBuiltInSubagentsEnabled } from "./subagent-settings";
 import { resolveShellTools } from "./powershell-settings";
 import { CHAT_ONLY_RESOURCE_LOADER_OPTIONS, contextFilesSystemPrompt } from "./chat-only";
 import { withPiWebBuiltInExtensions } from "./pi-web-extensions";
+import { refreshPiWebLlamaModels } from "./pi-web-llama";
 import {
   appendSessionToolSelection,
   readSessionToolSelection,
@@ -2057,6 +2058,7 @@ export async function startRpcSession(
           }),
       ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
     });
+    await refreshPiWebLlamaModels(services.modelRuntime);
     const scope = await resolveVisibleModels(
       services.modelRuntime,
       services.settingsManager.getEnabledModels(),

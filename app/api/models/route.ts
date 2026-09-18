@@ -12,6 +12,7 @@ import { resolveVisibleModels, selectInitialModelScope } from "@/lib/model-scope
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
 import { projectTrustReloadOptions } from "@/lib/project-trust";
 import { withPiWebBuiltInExtensions } from "@/lib/pi-web-extensions";
+import { refreshPiWebLlamaModels } from "@/lib/pi-web-llama";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ async function loadModels(cwd: string): Promise<ModelsData> {
     resourceLoaderOptions: withPiWebBuiltInExtensions({}),
     ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
   });
+  await refreshPiWebLlamaModels(services.modelRuntime);
   const modelError = services.modelRuntime.getError();
   const settings: SettingsManager = services.settingsManager;
   // `enabledModels` supports globs and fuzzy patterns, so resolve it the same
