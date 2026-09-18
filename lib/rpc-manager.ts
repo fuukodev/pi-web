@@ -42,7 +42,6 @@ import { isBuiltInSubagentsEnabled } from "./subagent-settings";
 import { resolveShellTools } from "./powershell-settings";
 import { CHAT_ONLY_RESOURCE_LOADER_OPTIONS, contextFilesSystemPrompt } from "./chat-only";
 import {
-  withPiWebBuiltInExtensions,
   withPiWebLlamaExtensions,
   withPiWebLlamaProvider,
 } from "./pi-web-extensions";
@@ -2064,7 +2063,7 @@ export async function startRpcSession(
           }, { includeCommands: subagentResources.loadExtensions })
         : chatOnly
           ? withPiWebLlamaProvider(CHAT_ONLY_RESOURCE_LOADER_OPTIONS)
-        : withPiWebBuiltInExtensions({
+        : withPiWebLlamaProvider({
             extensionFactories: [
               createProjectCommandBashExtension({
                 cwd: sessionCwd,
