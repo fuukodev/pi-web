@@ -1559,21 +1559,25 @@ function OAuthDetail({ provider, onRefresh }: { provider: OAuthProvider; onRefre
 
 function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRefresh: () => void }) {
   const [apiKey, setApiKey] = useState("");
+  const [serverUrl, setServerUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedOk, setSavedOk] = useState(false);
   const { t } = useI18n();
+  const isLlama = provider.id === "llama.cpp";
+  const canSave = isLlama ? Boolean(serverUrl.trim()) : Boolean(apiKey.trim());
 
   // Reset state when provider changes
   useEffect(() => {
     setApiKey("");
+    setServerUrl("");
     setError(null);
     setSavedOk(false);
   }, [provider.id]);
 
   const handleSave = useCallback(async () => {
-    if (!apiKey.trim()) return;
+    if (!canSave) return;
     setSaving(true);
     setError(null);
     setSavedOk(false);
@@ -1581,7 +1585,10 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
       const res = await fetch(`/api/auth/api-key/${encodeURIComponent(provider.id)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: apiKey.trim() }),
+        body: JSON.stringify({
+          apiKey: apiKey.trim(),
+          ...(isLlama ? { serverUrl: serverUrl.trim() } : {}),
+        }),
       });
       const d = await res.json() as { success?: boolean; error?: string };
       if (!res.ok || d.error) {
@@ -1597,7 +1604,7 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
     } finally {
       setSaving(false);
     }
-  }, [apiKey, provider.id, onRefresh]);
+  }, [apiKey, canSave, isLlama, onRefresh, provider.id, serverUrl]);
 
   const handleRemove = useCallback(async () => {
     setRemoving(true);
@@ -1642,30 +1649,46 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
 
       {!provider.configured && (
         <p style={{ margin: 0, fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>
-          Enter your {provider.displayName} API key to enable {provider.modelCount} model{provider.modelCount !== 1 ? "s" : ""}.
+          {isLlama
+            ? "Enter your llama.cpp server URL and optional API key to enable its models."
+            : <>Enter your {provider.displayName} API key to enable {provider.modelCount} model{provider.modelCount !== 1 ? "s" : ""}.</>}
         </p>
       )}
 
-      <div style={{ display: "flex", gap: 6 }}>
-        <SecretTextInput
-          value={apiKey}
-          onChange={setApiKey}
-          onKeyDown={(e) => { if (e.key === "Enter" && apiKey.trim()) handleSave(); }}
-          placeholder={provider.configured ? "Enter new key to replace…" : "sk-…"}
-          style={{ flex: 1 }}
-          autoComplete="off"
-          spellCheck={false}
-          mono
-        />
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {isLlama && (
+          <input
+            type="url"
+            value={serverUrl}
+            onChange={(event) => setServerUrl(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter" && canSave) handleSave(); }}
+            placeholder="http://127.0.0.1:8080"
+            aria-label="llama.cpp server URL"
+            autoComplete="url"
+            spellCheck={false}
+            style={{ width: "100%", padding: "6px 9px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text)", fontSize: 12, outline: "none", fontFamily: "var(--font-mono)", boxSizing: "border-box" }}
+          />
+        )}
+        <div style={{ display: "flex", gap: 6 }}>
+          <SecretTextInput
+            value={apiKey}
+            onChange={setApiKey}
+            onKeyDown={(e) => { if (e.key === "Enter" && canSave) handleSave(); }}
+            placeholder={isLlama ? "Optional API key" : (provider.configured ? "Enter new key to replace…" : "sk-…")}
+            style={{ flex: 1 }}
+            autoComplete="off"
+            spellCheck={false}
+            mono
+          />
         <button
           onClick={handleSave}
-          disabled={saving || !apiKey.trim() || savedOk}
+          disabled={saving || !canSave || savedOk}
           style={{
             padding: "6px 12px",
-            background: savedOk ? "#16a34a" : apiKey.trim() ? "var(--accent)" : "var(--bg-panel)",
+            background: savedOk ? "#16a34a" : canSave ? "var(--accent)" : "var(--bg-panel)",
             border: "none", borderRadius: 5,
-            color: savedOk ? "#fff" : apiKey.trim() ? "var(--accent-contrast)" : "var(--text-dim)",
-            cursor: (saving || !apiKey.trim() || savedOk) ? "not-allowed" : "pointer",
+            color: savedOk ? "#fff" : canSave ? "var(--accent-contrast)" : "var(--text-dim)",
+            cursor: (saving || !canSave || savedOk) ? "not-allowed" : "pointer",
             fontSize: 12, fontWeight: 600, flexShrink: 0,
             display: "flex", alignItems: "center", gap: 5,
           }}
@@ -1677,6 +1700,7 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
           )}
            {savedOk ? t("i18n.saved") : saving ? t("i18n.saving") : t("i18n.save")}
         </button>
+        </div>
       </div>
 
       {error && <p style={{ margin: 0, fontSize: 12, color: "#f87171" }}>{error}</p>}

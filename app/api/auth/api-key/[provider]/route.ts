@@ -2,25 +2,38 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { NextResponse } from "next/server";
 import { invalidateModelsCache } from "@/lib/models-cache";
 import { removeStoredCredentialIfType, storeProviderCredential } from "@/lib/provider-credential-store";
+import { registerPiWebLlamaProvider } from "@/lib/pi-web-extensions";
 
 export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ provider: string }> };
 
-// POST /api/auth/api-key/[provider]  body: { apiKey: string }
+// POST /api/auth/api-key/[provider]  body: { apiKey?: string, serverUrl?: string }
 export async function POST(req: Request, { params }: Params) {
   const { provider } = await params;
   try {
-    const { apiKey } = await req.json() as { apiKey?: string };
-    if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
-      return NextResponse.json({ error: "apiKey is required" }, { status: 400 });
+    const body = await req.json() as { apiKey?: unknown; baseUrl?: unknown; serverUrl?: unknown };
+    const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+    const serverUrl = typeof body.serverUrl === "string"
+      ? body.serverUrl.trim()
+      : typeof body.baseUrl === "string"
+        ? body.baseUrl.trim()
+        : "";
+    const isLlama = provider === "llama.cpp";
+    if ((!isLlama && !apiKey) || (isLlama && !serverUrl)) {
+      return NextResponse.json(
+        { error: isLlama ? "serverUrl is required" : "apiKey is required" },
+        { status: 400 },
+      );
     }
     const modelRuntime = await ModelRuntime.create();
+    if (isLlama) await registerPiWebLlamaProvider(modelRuntime);
     const apiKeyAuth = modelRuntime.getProvider(provider)?.auth.apiKey;
     if (!apiKeyAuth?.login) {
       throw new Error(`${provider} does not support API key login`);
     }
     let keySubmitted = false;
+    let serverUrlSubmitted = false;
     const credential = await apiKeyAuth.login({
       signal: req.signal,
       notify: () => {},
@@ -30,9 +43,13 @@ export async function POST(req: Request, { params }: Params) {
           if (keyOption) return keyOption.id;
           throw new Error(`${provider} requires interactive authentication setup`);
         }
+        if (isLlama && !serverUrlSubmitted && prompt.type === "text") {
+          serverUrlSubmitted = true;
+          return serverUrl;
+        }
         if (!keySubmitted && prompt.type === "secret") {
           keySubmitted = true;
-          return apiKey.trim();
+          return apiKey;
         }
         throw new Error(`${provider} requires additional authentication settings`);
       },

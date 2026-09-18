@@ -2,7 +2,18 @@ import type { Api, Provider } from "@earendil-works/pi-ai";
 import type {
   ExtensionFactory,
   InlineExtension,
+  ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
+
+type LlamaProviderModule = {
+  createLlamaProvider: () => { provider: Provider<Api> };
+};
+
+async function loadLlamaProvider(): Promise<Provider<Api>> {
+  const packageEntry = await import.meta.resolve("@earendil-works/pi-coding-agent");
+  const llamaModule = await import(new URL("./extensions/llama/provider.js", packageEntry).href) as LlamaProviderModule;
+  return llamaModule.createLlamaProvider().provider;
+}
 
 const LLAMA_EXTENSION: InlineExtension = {
   name: "llama.cpp",
@@ -12,10 +23,10 @@ const LLAMA_EXTENSION: InlineExtension = {
     // public package exports. Resolve the shipped dist file at runtime so
     // pi-web uses the exact same llama.cpp implementation as `pi`.
     const packageEntry = await import.meta.resolve("@earendil-works/pi-coding-agent");
-    const module = await import(new URL("./extensions/llama/index.js", packageEntry).href) as {
+    const llamaModule = await import(new URL("./extensions/llama/index.js", packageEntry).href) as {
       default: ExtensionFactory;
     };
-    await module.default(pi);
+    await llamaModule.default(pi);
   },
 };
 
@@ -25,11 +36,7 @@ const LLAMA_PROVIDER_EXTENSION: InlineExtension = {
   factory: async (pi) => {
     // Chat-only and resource-isolated subagent sessions need the provider for
     // model selection, but must not load the interactive `/llama` command.
-    const packageEntry = await import.meta.resolve("@earendil-works/pi-coding-agent");
-    const module = await import(new URL("./extensions/llama/provider.js", packageEntry).href) as {
-      createLlamaProvider: () => { provider: Provider<Api> };
-    };
-    pi.registerProvider(module.createLlamaProvider().provider);
+    pi.registerProvider(await loadLlamaProvider());
   },
 };
 
@@ -54,6 +61,13 @@ export function withPiWebLlamaExtensions<T extends object>(
   { includeCommands = true }: { includeCommands?: boolean } = {},
 ): ResourceLoaderOptions<T> {
   return withLlamaExtension(options, includeCommands ? LLAMA_EXTENSION : LLAMA_PROVIDER_EXTENSION);
+}
+
+/** Register the built-in provider on runtimes that do not use a resource loader. */
+export async function registerPiWebLlamaProvider(
+  modelRuntime: Pick<ModelRuntime, "registerNativeProvider">,
+): Promise<void> {
+  modelRuntime.registerNativeProvider(await loadLlamaProvider());
 }
 
 /** Add Pi's built-in provider and interactive commands. */
