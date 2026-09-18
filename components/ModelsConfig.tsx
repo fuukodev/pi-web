@@ -1560,6 +1560,7 @@ function OAuthDetail({ provider, onRefresh }: { provider: OAuthProvider; onRefre
 function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRefresh: () => void }) {
   const [apiKey, setApiKey] = useState("");
   const [serverUrl, setServerUrl] = useState("");
+  const [clearApiKey, setClearApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1572,6 +1573,7 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
   useEffect(() => {
     setApiKey("");
     setServerUrl("");
+    setClearApiKey(false);
     setError(null);
     setSavedOk(false);
   }, [provider.id]);
@@ -1581,12 +1583,17 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
     setSaving(true);
     setError(null);
     setSavedOk(false);
+    const llamaKeyPayload = apiKey.trim()
+      ? { apiKey: apiKey.trim() }
+      : clearApiKey
+        ? { apiKey: "" }
+        : {};
     try {
       const res = await fetch(`/api/auth/api-key/${encodeURIComponent(provider.id)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+          ...(isLlama ? llamaKeyPayload : { ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) }),
           ...(isLlama ? { serverUrl: serverUrl.trim() } : {}),
         }),
       });
@@ -1595,6 +1602,7 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
         setError(d.error ?? `HTTP ${res.status}`);
       } else {
         setApiKey("");
+        setClearApiKey(false);
         setSavedOk(true);
         setTimeout(() => setSavedOk(false), 2000);
         onRefresh();
@@ -1604,7 +1612,7 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
     } finally {
       setSaving(false);
     }
-  }, [apiKey, canSave, isLlama, onRefresh, provider.id, serverUrl]);
+  }, [apiKey, canSave, clearApiKey, isLlama, onRefresh, provider.id, serverUrl]);
 
   const handleRemove = useCallback(async () => {
     setRemoving(true);
@@ -1701,6 +1709,16 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
            {savedOk ? t("i18n.saved") : saving ? t("i18n.saving") : t("i18n.save")}
         </button>
         </div>
+        {isLlama && provider.configured && (
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-muted)" }}>
+            <input
+              type="checkbox"
+              checked={clearApiKey}
+              onChange={(event) => setClearApiKey(event.target.checked)}
+            />
+            Clear stored API key
+          </label>
+        )}
       </div>
 
       {error && <p style={{ margin: 0, fontSize: 12, color: "#f87171" }}>{error}</p>}
