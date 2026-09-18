@@ -7,6 +7,7 @@ import {
   storeProviderCredential,
 } from "@/lib/provider-credential-store";
 import { registerPiWebLlamaProvider } from "@/lib/pi-web-extensions";
+import { invalidatePiWebLlamaRefresh } from "@/lib/pi-web-llama";
 import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
@@ -116,6 +117,7 @@ export async function POST(req: Request, { params }: Params) {
     await storeProviderCredential(provider, credentialToStore, undefined, {
       preserveExistingApiKey: isLlama && !hasApiKey,
     });
+    if (isLlama) invalidatePiWebLlamaRefresh();
     invalidateModelsCache();
     return NextResponse.json({ success: true });
   } catch (error) {

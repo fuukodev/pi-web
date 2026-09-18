@@ -6,6 +6,10 @@ const LLAMA_REFRESH_TIMEOUT_MS = 15_000;
 const LLAMA_EMPTY_CATALOG_RETRY_MS = 60_000;
 const emptyCatalogRefreshes = new Map<string, number>();
 
+export function invalidatePiWebLlamaRefresh(): void {
+  emptyCatalogRefreshes.clear();
+}
+
 function catalogMatchesServer(models: readonly Model<Api>[], baseUrl: string): boolean {
   return models.length > 0 && models.every((model) => model.baseUrl === baseUrl);
 }
