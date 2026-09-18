@@ -2026,7 +2026,7 @@ export async function startRpcSession(
       agentDir,
       settingsManager,
       resourceLoaderOptions: subagentResources
-        ? {
+        ? withPiWebBuiltInExtensions({
             noExtensions: !subagentResources.loadExtensions,
             noSkills: !subagentResources.loadSkills,
             noPromptTemplates: true,
@@ -2039,7 +2039,7 @@ export async function startRpcSession(
                 }
               : {}),
             appendSystemPrompt: subagentResources.appendSystemPrompt,
-          }
+          })
         : chatOnly
           ? withPiWebBuiltInExtensions(CHAT_ONLY_RESOURCE_LOADER_OPTIONS)
         : withPiWebBuiltInExtensions({
