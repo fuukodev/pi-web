@@ -13,6 +13,8 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ provider: string }> };
 
+const LLAMA_LOGIN_TIMEOUT_MS = 15_000;
+
 function isValidLlamaServerUrl(value: string): boolean {
   if (value.length > 2048) return false;
   try {
@@ -40,6 +42,10 @@ export async function POST(req: Request, { params }: Params) {
   const { provider } = await params;
   try {
     const body = await req.json() as { apiKey?: unknown; baseUrl?: unknown; serverUrl?: unknown };
+    const hasApiKey = Object.hasOwn(body, "apiKey");
+    if (hasApiKey && typeof body.apiKey !== "string") {
+      return NextResponse.json({ error: "apiKey must be a string" }, { status: 400 });
+    }
     const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
     const serverUrl = typeof body.serverUrl === "string"
       ? body.serverUrl.trim()
@@ -61,7 +67,7 @@ export async function POST(req: Request, { params }: Params) {
     }
     const modelRuntime = await ModelRuntime.create();
     if (isLlama) await registerPiWebLlamaProvider(modelRuntime);
-    const storedCredential = isLlama && !apiKey
+    const storedCredential = isLlama && !hasApiKey
       ? await readStoredProviderCredential(provider)
       : undefined;
     const retainedApiKey = storedCredential?.type === "api_key" && typeof storedCredential.key === "string"
@@ -73,8 +79,11 @@ export async function POST(req: Request, { params }: Params) {
     }
     let keySubmitted = false;
     let serverUrlSubmitted = false;
+    const loginSignal = isLlama
+      ? AbortSignal.any([req.signal, AbortSignal.timeout(LLAMA_LOGIN_TIMEOUT_MS)])
+      : req.signal;
     const credential = await apiKeyAuth.login({
-      signal: req.signal,
+      signal: loginSignal,
       notify: () => {},
       prompt: async (prompt) => {
         if (prompt.type === "select") {

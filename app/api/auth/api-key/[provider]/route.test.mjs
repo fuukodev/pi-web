@@ -108,4 +108,16 @@ test("configures llama.cpp with a server URL and optional API key", async () => 
   assert.equal(preservedResponse.status, 200);
   auth = JSON.parse(await readFile(join(agentDir, "auth.json"), "utf8"));
   assert.equal(auth["llama.cpp"].key, "stored-secret");
+
+  const clearedResponse = await POST(
+    new Request("http://localhost/api/auth/api-key/llama.cpp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Host: "localhost" },
+      body: JSON.stringify({ serverUrl, apiKey: "" }),
+    }),
+    { params: Promise.resolve({ provider: "llama.cpp" }) },
+  );
+  assert.equal(clearedResponse.status, 200);
+  auth = JSON.parse(await readFile(join(agentDir, "auth.json"), "utf8"));
+  assert.equal(auth["llama.cpp"].key, undefined);
 });
