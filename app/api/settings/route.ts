@@ -14,6 +14,7 @@ import {
   type SettingsWarning,
 } from "@/lib/pi-settings";
 import { projectTrustReloadOptions } from "@/lib/project-trust";
+import { withPiWebBuiltInExtensions } from "@/lib/pi-web-extensions";
 import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +80,7 @@ async function resolveModel(cwd: string, ref: ModelRef): Promise<ResolvedModel> 
   const services = await createAgentSessionServices({
     cwd,
     agentDir,
+    resourceLoaderOptions: withPiWebBuiltInExtensions({}),
     ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
   });
 
