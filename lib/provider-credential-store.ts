@@ -72,14 +72,51 @@ async function updateStoredCredentials<T>(
   }
 }
 
+/** Read one stored credential without exposing it through an API response. */
+export async function readStoredProviderCredential(
+  providerId: string,
+  authPath = join(getAgentDir(), "auth.json"),
+): Promise<Credential | undefined> {
+  if (!existsSync(authPath)) return undefined;
+  const release = await lockfile.lock(authPath, {
+    retries: {
+      retries: 10,
+      factor: 2,
+      minTimeout: 100,
+      maxTimeout: 10_000,
+      randomize: true,
+    },
+    stale: 30_000,
+  });
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(authPath, "utf-8"));
+    if (!isRecord(parsed)) throw new Error("Invalid auth.json: expected an object");
+    const credential = parsed[providerId];
+    if (!isRecord(credential) || (credential.type !== "api_key" && credential.type !== "oauth")) {
+      return undefined;
+    }
+    return credential as unknown as Credential;
+  } finally {
+    await release();
+  }
+}
+
 /** Store a provider credential without triggering a model-catalog refresh. */
 export function storeProviderCredential(
   providerId: string,
   credential: Credential,
   authPath = join(getAgentDir(), "auth.json"),
+  options: { preserveExistingApiKey?: boolean } = {},
 ): Promise<void> {
   return updateStoredCredentials(authPath, (credentials) => {
-    credentials[providerId] = credential;
+    let nextCredential = credential;
+    if (options.preserveExistingApiKey && credential.type === "api_key" && !credential.key) {
+      const existing = credentials[providerId];
+      if (isRecord(existing) && existing.type === "api_key" && typeof existing.key === "string") {
+        nextCredential = { ...credential, key: existing.key };
+      }
+    }
+    credentials[providerId] = nextCredential;
     return { result: undefined, changed: true };
   });
 }

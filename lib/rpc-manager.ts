@@ -16,7 +16,7 @@ import { cacheSessionPath, getLatestModelChange, invalidateSessionListCache, res
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import { notifySessionComplete } from "./web-push";
 import { hasActiveSessionLivenessProvider } from "./session-liveness";
-import type { SlashCommandInfo } from "@earendil-works/pi-coding-agent";
+import type { LoadExtensionsResult, SlashCommandInfo } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionLike, ExtensionUiContextLike, ToolInfo } from "./pi-types";
 import type {
   ExtensionUiRequest,
@@ -41,6 +41,11 @@ import { createSubagentController } from "./subagent-runtime";
 import { isBuiltInSubagentsEnabled } from "./subagent-settings";
 import { resolveShellTools } from "./powershell-settings";
 import { CHAT_ONLY_RESOURCE_LOADER_OPTIONS, contextFilesSystemPrompt } from "./chat-only";
+import {
+  withPiWebLlamaExtensions,
+  withPiWebLlamaProvider,
+} from "./pi-web-extensions";
+import { refreshPiWebLlamaModels } from "./pi-web-llama";
 import {
   appendSessionToolSelection,
   readSessionToolSelection,
@@ -712,7 +717,13 @@ export class AgentSessionWrapper {
 
       case "set_model": {
         const { provider, modelId } = command as { provider: string; modelId: string };
-        let model = this.inner.modelRuntime.getModel(provider, modelId);
+        let model;
+        if (provider === "llama.cpp") {
+          await refreshPiWebLlamaModels(
+            this.inner.modelRuntime as unknown as Parameters<typeof refreshPiWebLlamaModels>[0],
+          );
+        }
+        model = this.inner.modelRuntime.getModel(provider, modelId);
         if (!model) {
           await this.inner.modelRuntime.refresh({ allowNetwork: false });
           model = this.inner.modelRuntime.getModel(provider, modelId);
@@ -2019,12 +2030,24 @@ export async function startRpcSession(
         ? undefined
         : projectTrustReloadOptions(sessionCwd, agentDir);
     const settingsManager = SettingsManager.create(sessionCwd, agentDir);
+    const defaultProvider = settingsManager.getDefaultProvider();
+    const defaultModelId = settingsManager.getDefaultModel();
+    const branch = sessionManager.getBranch();
+    const hasExistingMessages = branch.some((entry) => entry.type === "message");
+    const savedModel = hasExistingMessages
+      ? getLatestModelChange(branch as unknown as SessionEntry[])
+      : null;
+    const shouldRefreshLlama = (
+      initialModel?.provider === "llama.cpp"
+      || defaultProvider === "llama.cpp"
+      || savedModel?.provider === "llama.cpp"
+    );
     const services = await createAgentSessionServices({
       cwd: sessionCwd,
       agentDir,
       settingsManager,
       resourceLoaderOptions: subagentResources
-        ? {
+        ? withPiWebLlamaExtensions({
             noExtensions: !subagentResources.loadExtensions,
             noSkills: !subagentResources.loadSkills,
             noPromptTemplates: true,
@@ -2037,10 +2060,10 @@ export async function startRpcSession(
                 }
               : {}),
             appendSystemPrompt: subagentResources.appendSystemPrompt,
-          }
+          }, { includeCommands: subagentResources.loadExtensions })
         : chatOnly
-          ? CHAT_ONLY_RESOURCE_LOADER_OPTIONS
-        : {
+          ? withPiWebLlamaProvider(CHAT_ONLY_RESOURCE_LOADER_OPTIONS)
+        : withPiWebLlamaProvider({
             extensionFactories: [
               createProjectCommandBashExtension({
                 cwd: sessionCwd,
@@ -2052,10 +2075,11 @@ export async function startRpcSession(
                 isBuiltInSubagentsEnabled,
               ),
             ],
-            extensionsOverride: (base) => preferUserBashExtension(preferPiWebSubagentExtension(base)),
-          },
+            extensionsOverride: (base: LoadExtensionsResult) => preferUserBashExtension(preferPiWebSubagentExtension(base)),
+          }),
       ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
     });
+    if (shouldRefreshLlama) await refreshPiWebLlamaModels(services.modelRuntime);
     const scope = await resolveVisibleModels(
       services.modelRuntime,
       services.settingsManager.getEnabledModels(),
@@ -2066,13 +2090,6 @@ export async function startRpcSession(
     )
       ? initialModel
       : undefined;
-    const defaultProvider = services.settingsManager.getDefaultProvider();
-    const defaultModelId = services.settingsManager.getDefaultModel();
-    const branch = sessionManager.getBranch();
-    const hasExistingMessages = branch.some((entry) => entry.type === "message");
-    const savedModel = hasExistingMessages
-      ? getLatestModelChange(branch as unknown as SessionEntry[])
-      : null;
     const restoredModel = savedModel
       ? services.modelRuntime.getModel(savedModel.provider, savedModel.modelId)
       : undefined;
