@@ -719,6 +719,12 @@ export class AgentSessionWrapper {
       case "set_model": {
         const { provider, modelId } = command as { provider: string; modelId: string };
         let model = this.inner.modelRuntime.getModel(provider, modelId);
+        if (!model && provider === "llama.cpp") {
+          await refreshPiWebLlamaModels(
+            this.inner.modelRuntime as unknown as Parameters<typeof refreshPiWebLlamaModels>[0],
+          );
+          model = this.inner.modelRuntime.getModel(provider, modelId);
+        }
         if (!model) {
           await this.inner.modelRuntime.refresh({ allowNetwork: false });
           model = this.inner.modelRuntime.getModel(provider, modelId);
@@ -2025,6 +2031,18 @@ export async function startRpcSession(
         ? undefined
         : projectTrustReloadOptions(sessionCwd, agentDir);
     const settingsManager = SettingsManager.create(sessionCwd, agentDir);
+    const defaultProvider = settingsManager.getDefaultProvider();
+    const defaultModelId = settingsManager.getDefaultModel();
+    const branch = sessionManager.getBranch();
+    const hasExistingMessages = branch.some((entry) => entry.type === "message");
+    const savedModel = hasExistingMessages
+      ? getLatestModelChange(branch as unknown as SessionEntry[])
+      : null;
+    const shouldRefreshLlama = (
+      initialModel?.provider === "llama.cpp"
+      || defaultProvider === "llama.cpp"
+      || savedModel?.provider === "llama.cpp"
+    );
     const services = await createAgentSessionServices({
       cwd: sessionCwd,
       agentDir,
@@ -2062,7 +2080,7 @@ export async function startRpcSession(
           }),
       ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
     });
-    await refreshPiWebLlamaModels(services.modelRuntime);
+    if (shouldRefreshLlama) await refreshPiWebLlamaModels(services.modelRuntime);
     const scope = await resolveVisibleModels(
       services.modelRuntime,
       services.settingsManager.getEnabledModels(),
@@ -2073,13 +2091,6 @@ export async function startRpcSession(
     )
       ? initialModel
       : undefined;
-    const defaultProvider = services.settingsManager.getDefaultProvider();
-    const defaultModelId = services.settingsManager.getDefaultModel();
-    const branch = sessionManager.getBranch();
-    const hasExistingMessages = branch.some((entry) => entry.type === "message");
-    const savedModel = hasExistingMessages
-      ? getLatestModelChange(branch as unknown as SessionEntry[])
-      : null;
     const restoredModel = savedModel
       ? services.modelRuntime.getModel(savedModel.provider, savedModel.modelId)
       : undefined;

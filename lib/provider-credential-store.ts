@@ -106,9 +106,17 @@ export function storeProviderCredential(
   providerId: string,
   credential: Credential,
   authPath = join(getAgentDir(), "auth.json"),
+  options: { preserveExistingApiKey?: boolean } = {},
 ): Promise<void> {
   return updateStoredCredentials(authPath, (credentials) => {
-    credentials[providerId] = credential;
+    let nextCredential = credential;
+    if (options.preserveExistingApiKey && credential.type === "api_key" && !credential.key) {
+      const existing = credentials[providerId];
+      if (isRecord(existing) && existing.type === "api_key" && typeof existing.key === "string") {
+        nextCredential = { ...credential, key: existing.key };
+      }
+    }
+    credentials[providerId] = nextCredential;
     return { result: undefined, changed: true };
   });
 }
