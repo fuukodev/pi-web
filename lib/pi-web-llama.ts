@@ -11,11 +11,19 @@ const LLAMA_REFRESH_TIMEOUT_MS = 15_000;
  * demand while keeping cached startups offline and fast.
  */
 export async function refreshPiWebLlamaModels(
-  modelRuntime: Pick<ModelRuntime, "getProvider" | "hasConfiguredAuth" | "refresh">,
+  modelRuntime: Pick<ModelRuntime, "getProvider" | "hasConfiguredAuth" | "getAuth" | "refresh">,
 ): Promise<void> {
   const provider = modelRuntime.getProvider(LLAMA_PROVIDER_ID);
-  if (!provider || provider.getModels().length > 0 || !modelRuntime.hasConfiguredAuth(LLAMA_PROVIDER_ID)) {
-    return;
+  if (!provider || !modelRuntime.hasConfiguredAuth(LLAMA_PROVIDER_ID)) return;
+
+  const models = provider.getModels();
+  if (models.length > 0) {
+    try {
+      const configuredBaseUrl = (await modelRuntime.getAuth(LLAMA_PROVIDER_ID))?.auth.baseUrl;
+      if (!configuredBaseUrl || models.every((model) => model.baseUrl === configuredBaseUrl)) return;
+    } catch {
+      return;
+    }
   }
 
   try {
