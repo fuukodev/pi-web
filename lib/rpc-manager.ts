@@ -41,7 +41,11 @@ import { createSubagentController } from "./subagent-runtime";
 import { isBuiltInSubagentsEnabled } from "./subagent-settings";
 import { resolveShellTools } from "./powershell-settings";
 import { CHAT_ONLY_RESOURCE_LOADER_OPTIONS, contextFilesSystemPrompt } from "./chat-only";
-import { withPiWebBuiltInExtensions } from "./pi-web-extensions";
+import {
+  withPiWebBuiltInExtensions,
+  withPiWebLlamaExtensions,
+  withPiWebLlamaProvider,
+} from "./pi-web-extensions";
 import { refreshPiWebLlamaModels } from "./pi-web-llama";
 import {
   appendSessionToolSelection,
@@ -2026,7 +2030,7 @@ export async function startRpcSession(
       agentDir,
       settingsManager,
       resourceLoaderOptions: subagentResources
-        ? withPiWebBuiltInExtensions({
+        ? withPiWebLlamaExtensions({
             noExtensions: !subagentResources.loadExtensions,
             noSkills: !subagentResources.loadSkills,
             noPromptTemplates: true,
@@ -2039,9 +2043,9 @@ export async function startRpcSession(
                 }
               : {}),
             appendSystemPrompt: subagentResources.appendSystemPrompt,
-          })
+          }, { includeCommands: subagentResources.loadExtensions })
         : chatOnly
-          ? withPiWebBuiltInExtensions(CHAT_ONLY_RESOURCE_LOADER_OPTIONS)
+          ? withPiWebLlamaProvider(CHAT_ONLY_RESOURCE_LOADER_OPTIONS)
         : withPiWebBuiltInExtensions({
             extensionFactories: [
               createProjectCommandBashExtension({

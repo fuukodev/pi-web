@@ -11,7 +11,7 @@ import {
 import { resolveVisibleModels, selectInitialModelScope } from "@/lib/model-scope";
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
 import { projectTrustReloadOptions } from "@/lib/project-trust";
-import { withPiWebBuiltInExtensions } from "@/lib/pi-web-extensions";
+import { withPiWebLlamaProvider } from "@/lib/pi-web-extensions";
 import { refreshPiWebLlamaModels } from "@/lib/pi-web-llama";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ async function loadModels(cwd: string): Promise<ModelsData> {
   const services = await createAgentSessionServices({
     cwd,
     agentDir,
-    resourceLoaderOptions: withPiWebBuiltInExtensions({}),
+    resourceLoaderOptions: withPiWebLlamaProvider({}),
     ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
   });
   await refreshPiWebLlamaModels(services.modelRuntime);
