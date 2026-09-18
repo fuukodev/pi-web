@@ -16,7 +16,7 @@ import { cacheSessionPath, getLatestModelChange, invalidateSessionListCache, res
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import { notifySessionComplete } from "./web-push";
 import { hasActiveSessionLivenessProvider } from "./session-liveness";
-import type { SlashCommandInfo } from "@earendil-works/pi-coding-agent";
+import type { LoadExtensionsResult, SlashCommandInfo } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionLike, ExtensionUiContextLike, ToolInfo } from "./pi-types";
 import type {
   ExtensionUiRequest,
@@ -41,6 +41,7 @@ import { createSubagentController } from "./subagent-runtime";
 import { isBuiltInSubagentsEnabled } from "./subagent-settings";
 import { resolveShellTools } from "./powershell-settings";
 import { CHAT_ONLY_RESOURCE_LOADER_OPTIONS, contextFilesSystemPrompt } from "./chat-only";
+import { withPiWebBuiltInExtensions } from "./pi-web-extensions";
 import {
   appendSessionToolSelection,
   readSessionToolSelection,
@@ -2039,8 +2040,8 @@ export async function startRpcSession(
             appendSystemPrompt: subagentResources.appendSystemPrompt,
           }
         : chatOnly
-          ? CHAT_ONLY_RESOURCE_LOADER_OPTIONS
-        : {
+          ? withPiWebBuiltInExtensions(CHAT_ONLY_RESOURCE_LOADER_OPTIONS)
+        : withPiWebBuiltInExtensions({
             extensionFactories: [
               createProjectCommandBashExtension({
                 cwd: sessionCwd,
@@ -2052,8 +2053,8 @@ export async function startRpcSession(
                 isBuiltInSubagentsEnabled,
               ),
             ],
-            extensionsOverride: (base) => preferUserBashExtension(preferPiWebSubagentExtension(base)),
-          },
+            extensionsOverride: (base: LoadExtensionsResult) => preferUserBashExtension(preferPiWebSubagentExtension(base)),
+          }),
       ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
     });
     const scope = await resolveVisibleModels(

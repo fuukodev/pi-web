@@ -16,11 +16,12 @@ const LLAMA_EXTENSION: InlineExtension = {
 };
 
 /** Add Pi's built-in provider extensions while preserving caller extensions. */
-export function withPiWebBuiltInExtensions<T extends { extensionFactories?: InlineExtension[] }>(
+export function withPiWebBuiltInExtensions<T extends object>(
   options: T,
-): T & { extensionFactories: InlineExtension[] } {
+): Omit<T, "extensionFactories"> & { extensionFactories: InlineExtension[] } {
+  const configured = options as T & { extensionFactories?: InlineExtension[] };
   return {
     ...options,
-    extensionFactories: [LLAMA_EXTENSION, ...(options.extensionFactories ?? [])],
+    extensionFactories: [LLAMA_EXTENSION, ...(configured.extensionFactories ?? [])],
   };
 }
