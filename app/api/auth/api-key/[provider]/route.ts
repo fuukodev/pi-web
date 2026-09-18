@@ -1,7 +1,11 @@
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { NextResponse } from "next/server";
 import { invalidateModelsCache } from "@/lib/models-cache";
-import { removeStoredCredentialIfType, storeProviderCredential } from "@/lib/provider-credential-store";
+import {
+  readStoredProviderCredential,
+  removeStoredCredentialIfType,
+  storeProviderCredential,
+} from "@/lib/provider-credential-store";
 import { registerPiWebLlamaProvider } from "@/lib/pi-web-extensions";
 import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
 
@@ -57,6 +61,12 @@ export async function POST(req: Request, { params }: Params) {
     }
     const modelRuntime = await ModelRuntime.create();
     if (isLlama) await registerPiWebLlamaProvider(modelRuntime);
+    const storedCredential = isLlama && !apiKey
+      ? await readStoredProviderCredential(provider)
+      : undefined;
+    const retainedApiKey = storedCredential?.type === "api_key" && typeof storedCredential.key === "string"
+      ? storedCredential.key
+      : "";
     const apiKeyAuth = modelRuntime.getProvider(provider)?.auth.apiKey;
     if (!apiKeyAuth?.login) {
       throw new Error(`${provider} does not support API key login`);
@@ -78,7 +88,10 @@ export async function POST(req: Request, { params }: Params) {
         }
         if (!keySubmitted && prompt.type === "secret") {
           keySubmitted = true;
-          return apiKey;
+          // The UI treats llama.cpp's key as optional. Preserve a stored key
+          // when only the server URL is being replaced, without copying keys
+          // from ambient environment variables into auth.json.
+          return apiKey || retainedApiKey;
         }
         throw new Error(`${provider} requires additional authentication settings`);
       },
