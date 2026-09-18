@@ -3,6 +3,8 @@ import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 const LLAMA_PROVIDER_ID = "llama.cpp";
 const LLAMA_REFRESH_TIMEOUT_MS = 15_000;
+const LLAMA_EMPTY_CATALOG_RETRY_MS = 60_000;
+const emptyCatalogRefreshes = new Map<string, number>();
 
 function catalogMatchesServer(models: readonly Model<Api>[], baseUrl: string): boolean {
   return models.length > 0 && models.every((model) => model.baseUrl === baseUrl);
@@ -53,13 +55,18 @@ export async function refreshPiWebLlamaModels(
 
   const models = provider.getModels();
   let configuredBaseUrl: string | undefined;
-  if (models.length > 0) {
-    try {
-      configuredBaseUrl = (await modelRuntime.getAuth(LLAMA_PROVIDER_ID))?.auth.baseUrl;
-      if (!configuredBaseUrl || catalogMatchesServer(models, configuredBaseUrl)) return;
-    } catch {
-      return;
-    }
+  try {
+    configuredBaseUrl = (await modelRuntime.getAuth(LLAMA_PROVIDER_ID))?.auth.baseUrl;
+    if (!configuredBaseUrl) return;
+    if (models.length > 0 && catalogMatchesServer(models, configuredBaseUrl)) return;
+  } catch {
+    return;
+  }
+
+  const lastEmptyRefresh = emptyCatalogRefreshes.get(configuredBaseUrl);
+  if (models.length === 0 && lastEmptyRefresh !== undefined
+    && Date.now() - lastEmptyRefresh < LLAMA_EMPTY_CATALOG_RETRY_MS) {
+    return;
   }
 
   try {
@@ -72,10 +79,16 @@ export async function refreshPiWebLlamaModels(
     // A disconnected local server should not hide the other providers from Pi Web.
   }
 
-  if (configuredBaseUrl) {
-    const refreshedProvider = modelRuntime.getProvider(LLAMA_PROVIDER_ID);
-    if (refreshedProvider && !catalogMatchesServer(refreshedProvider.getModels(), configuredBaseUrl)) {
+  const refreshedProvider = modelRuntime.getProvider(LLAMA_PROVIDER_ID);
+  if (!refreshedProvider) return;
+  const refreshedModels = refreshedProvider.getModels();
+  if (refreshedModels.length === 0) {
+    emptyCatalogRefreshes.set(configuredBaseUrl, Date.now());
+  } else {
+    emptyCatalogRefreshes.delete(configuredBaseUrl);
+    if (!catalogMatchesServer(refreshedModels, configuredBaseUrl)) {
       clearStaleLlamaCatalog(modelRuntime, refreshedProvider);
+      emptyCatalogRefreshes.set(configuredBaseUrl, Date.now());
     }
   }
 }

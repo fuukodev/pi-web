@@ -108,7 +108,12 @@ export async function POST(req: Request, { params }: Params) {
     // ModelRuntime.login() persists the credential and then performs an
     // unbounded network catalog refresh. Store the returned credential
     // directly so a slow catalog cannot leave the save request hanging.
-    await storeProviderCredential(provider, credential, undefined, {
+    // Keep the retained key only for validation; the final locked write must
+    // merge with whatever credential is current after the network request.
+    const credentialToStore = isLlama && !hasApiKey && credential.type === "api_key"
+      ? { ...credential, key: undefined }
+      : credential;
+    await storeProviderCredential(provider, credentialToStore, undefined, {
       preserveExistingApiKey: isLlama && !hasApiKey,
     });
     invalidateModelsCache();
