@@ -1586,7 +1586,7 @@ function ApiKeyDetail({ provider, onRefresh }: { provider: ApiKeyProvider; onRef
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          apiKey: apiKey.trim(),
+          ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
           ...(isLlama ? { serverUrl: serverUrl.trim() } : {}),
         }),
       });
