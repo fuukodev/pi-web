@@ -1,3 +1,6 @@
+import { findPackageJSON } from "node:module";
+import { resolve as resolvePath } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { Api, Provider } from "@earendil-works/pi-ai";
 import type {
   ExtensionFactory,
@@ -9,9 +12,19 @@ type LlamaProviderModule = {
   createLlamaProvider: () => { provider: Provider<Api> };
 };
 
+const piPackageJson = findPackageJSON(
+  "@earendil-works/pi-coding-agent",
+  pathToFileURL(resolvePath(process.cwd(), "package.json")),
+);
+if (!piPackageJson) throw new Error("Unable to resolve @earendil-works/pi-coding-agent");
+const PI_PACKAGE_JSON_URL = pathToFileURL(piPackageJson);
+
+function resolvePiPackageFile(relativePath: string): string {
+  return new URL(relativePath, PI_PACKAGE_JSON_URL).href;
+}
+
 async function loadLlamaProvider(): Promise<Provider<Api>> {
-  const packageEntry = await import.meta.resolve("@earendil-works/pi-coding-agent");
-  const llamaModule = await import(new URL("./extensions/llama/provider.js", packageEntry).href) as LlamaProviderModule;
+  const llamaModule = await import(resolvePiPackageFile("./dist/extensions/llama/provider.js")) as LlamaProviderModule;
   return llamaModule.createLlamaProvider().provider;
 }
 
@@ -22,8 +35,7 @@ const LLAMA_EXTENSION: InlineExtension = {
     // The SDK exposes the extension factory to the CLI but not through its
     // public package exports. Resolve the shipped dist file at runtime so
     // pi-web uses the exact same llama.cpp implementation as `pi`.
-    const packageEntry = await import.meta.resolve("@earendil-works/pi-coding-agent");
-    const llamaModule = await import(new URL("./extensions/llama/index.js", packageEntry).href) as {
+    const llamaModule = await import(resolvePiPackageFile("./dist/extensions/llama/index.js")) as {
       default: ExtensionFactory;
     };
     await llamaModule.default(pi);
