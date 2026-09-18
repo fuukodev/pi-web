@@ -718,13 +718,13 @@ export class AgentSessionWrapper {
 
       case "set_model": {
         const { provider, modelId } = command as { provider: string; modelId: string };
-        let model = this.inner.modelRuntime.getModel(provider, modelId);
-        if (!model && provider === "llama.cpp") {
+        let model;
+        if (provider === "llama.cpp") {
           await refreshPiWebLlamaModels(
             this.inner.modelRuntime as unknown as Parameters<typeof refreshPiWebLlamaModels>[0],
           );
-          model = this.inner.modelRuntime.getModel(provider, modelId);
         }
+        model = this.inner.modelRuntime.getModel(provider, modelId);
         if (!model) {
           await this.inner.modelRuntime.refresh({ allowNetwork: false });
           model = this.inner.modelRuntime.getModel(provider, modelId);
