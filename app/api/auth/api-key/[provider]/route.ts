@@ -3,13 +3,36 @@ import { NextResponse } from "next/server";
 import { invalidateModelsCache } from "@/lib/models-cache";
 import { removeStoredCredentialIfType, storeProviderCredential } from "@/lib/provider-credential-store";
 import { registerPiWebLlamaProvider } from "@/lib/pi-web-extensions";
+import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ provider: string }> };
 
+function isValidLlamaServerUrl(value: string): boolean {
+  if (value.length > 2048) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:")
+      && Boolean(url.hostname)
+      && !url.username
+      && !url.password
+      && !url.search
+      && !url.hash;
+  } catch {
+    return false;
+  }
+}
+
 // POST /api/auth/api-key/[provider]  body: { apiKey?: string, serverUrl?: string }
 export async function POST(req: Request, { params }: Params) {
+  if (!isApiRequestAllowed(req)) {
+    return NextResponse.json({ error: "Untrusted API request" }, { status: 403 });
+  }
+  if (!hasJsonContentType(req)) {
+    return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
+
   const { provider } = await params;
   try {
     const body = await req.json() as { apiKey?: unknown; baseUrl?: unknown; serverUrl?: unknown };
@@ -23,6 +46,12 @@ export async function POST(req: Request, { params }: Params) {
     if ((!isLlama && !apiKey) || (isLlama && !serverUrl)) {
       return NextResponse.json(
         { error: isLlama ? "serverUrl is required" : "apiKey is required" },
+        { status: 400 },
+      );
+    }
+    if (isLlama && !isValidLlamaServerUrl(serverUrl)) {
+      return NextResponse.json(
+        { error: "serverUrl must be an http(s) URL without credentials or query parameters" },
         { status: 400 },
       );
     }
@@ -66,7 +95,10 @@ export async function POST(req: Request, { params }: Params) {
 }
 
 // DELETE /api/auth/api-key/[provider] — removes stored API key
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(req: Request, { params }: Params) {
+  if (!isApiRequestAllowed(req)) {
+    return NextResponse.json({ error: "Untrusted API request" }, { status: 403 });
+  }
   const { provider } = await params;
   try {
     const removal = await removeStoredCredentialIfType(provider, "api_key");

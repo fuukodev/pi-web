@@ -38,11 +38,43 @@ after(async () => {
   else process.env.PI_CODING_AGENT_DIR = originalAgentDir;
 });
 
+test("rejects cross-site API-key requests before contacting the llama server", async () => {
+  const response = await POST(
+    new Request("http://localhost/api/auth/api-key/llama.cpp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Host: "localhost",
+        Origin: "https://attacker.example",
+        "Sec-Fetch-Site": "cross-site",
+      },
+      body: JSON.stringify({ serverUrl }),
+    }),
+    { params: Promise.resolve({ provider: "llama.cpp" }) },
+  );
+
+  assert.equal(response.status, 403);
+});
+
+test("validates llama server URLs at the API boundary", async () => {
+  const response = await POST(
+    new Request("http://localhost/api/auth/api-key/llama.cpp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Host: "localhost" },
+      body: JSON.stringify({ serverUrl: "ftp://internal.example" }),
+    }),
+    { params: Promise.resolve({ provider: "llama.cpp" }) },
+  );
+
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /http\(s\) URL/);
+});
+
 test("configures llama.cpp with a server URL and optional API key", async () => {
   const response = await POST(
     new Request("http://localhost/api/auth/api-key/llama.cpp", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Host: "localhost" },
       body: JSON.stringify({ serverUrl }),
     }),
     { params: Promise.resolve({ provider: "llama.cpp" }) },
